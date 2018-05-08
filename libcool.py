@@ -16,13 +16,14 @@ def bumpPid(mic, num):
 
 def runApp(app, node, tag):
     uid = str(uuid.uuid1())
-    fout = "/exp/log/%s-%s.out" % (app, tag)
-    ferr = "/exp/log/%s-%s.err" % (app, tag)
+    fout = "/home/cc/exp/log/%s-%s.out" % (app, tag)
+    ferr = "/home/cc/exp/log/%s-%s.err" % (app, tag)
     if True:
         #print "enter cr_run"
         #print str(datetime.datetime.now())
+        print "numactl --cpunodebind=%s --membind=%s /exp/prebuilt/%s </dev/null" % (node, node, app)
         stdout = subprocess.check_output("numactl --cpunodebind=%s --membind=%s /exp/prebuilt/%s </dev/null 1>%s 2>%s & echo $!" % (node, node, app, fout, ferr), shell=True)
-        #print mic, stdout, app
+        print node, stdout, app
         #print str(datetime.datetime.now())
     context = {
         "app" : app,
@@ -44,8 +45,8 @@ class MicLogger(threading.Thread):
 
     def run(self):
         #ts = self.context["datetime"].strftime("%Y-%m-%d-%H-%M-%S.%f")
-        fmic0 = "/exp/data/%s-node0-stat.log" % (self.tag)
-        fmic1 = "/exp/data/%s-node1-stat.log" % (self.tag)
+        fmic0 = "/home/cc/exp/data/%s-node0-stat.log" % (self.tag)
+        fmic1 = "/home/cc/exp/data/%s-node1-stat.log" % (self.tag)
         stat0 = open(fmic0, "w")
         stat1 = open(fmic1, "w")
         popen0 = subprocess.Popen(["/exp/bin/start-stat.sh", self.statfile0], stdin=None, stdout=stat0, stderr=subprocess.STDOUT)
@@ -55,22 +56,26 @@ class MicLogger(threading.Thread):
             if not pidfinishes(self.context):
                 cd = 10
             else:
+               # break
                 cd -= 1
                 if cd < 0:
                     break
             time.sleep(1)
+        print "reach send signal"
         popen0.send_signal(9)
         popen1.send_signal(9)
         #subprocess.call("cp %s /exp/data/%s-node0-latest.log" % (fmic0, self.tag), shell=True)
         #subprocess.call("cp %s /exp/data/%s-node1-latest.log" % (fmic1, self.tag), shell=True)
 
 def pidfinishes(context):
+    #print context
     for _, v in context.iteritems():
         if isinstance(v, dict):
-            r = subprocess.call("sudo kill -0 %d" % v["pid"], shell=True)
+            #print "in pidfinish", v["pid"]
+            r = subprocess.call("sudo kill -0 %d >/dev/null 2>&1" % v["pid"], shell=True)
             if r == 0:
                 return False
-            r = subprocess.call("sudo kill -0 %d" % v["pid"], shell=True)
+            r = subprocess.call("sudo kill -0 %d >/dev/null 2>&1" % v["pid"], shell=True)
             if r == 0:
                 return False
     return True
@@ -113,13 +118,12 @@ def stopHelper(mic, app):
     elif app == "openmc":
         subprocess.call("sudo ssh %s 'killall -9 %s' >/dev/null 2>&1" % (mic, "openmc"), shell=True)
     else:
-        subprocess.call("sudo ssh %s 'killall -9 %s' >/dev/null 2>&1" % (mic, app), shell=True)
+        subprocess.call("sudo killall -9 %s >/dev/null 2>&1" % (app), shell=True)
 
 def stopContext(c):
     stopHelper(c["app1"]["mic"], c["app1"]["app"])
     if "app2" in c:
         stopHelper(c["app2"]["mic"], c["app2"]["app"])
-    # c["fan"].send_signal(9)
 
 class SwitchAppThread(threading.Thread):
     def __init__(self, context):

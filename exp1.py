@@ -1,5 +1,3 @@
-#!/home/kaicheng/root/bin/python
-
 import libcool
 import sys
 import time
@@ -15,47 +13,50 @@ if len(sys.argv) != 3:
 
 
 if True:
-    time.sleep(60)
+    #time.sleep(60)
     libcool.clearStat()
     logging.info("Running %s %s", sys.argv[1], sys.argv[2])
+    start = time.time()
     c = libcool.runConfiguration(sys.argv[1], sys.argv[2])
-    time.sleep(60 * 60)
+    time.sleep((60 * 60) - (time.time() - start))
     libcool.stopContext(c)
     c["logger"].join()
     logging.info("Finished %s %s", sys.argv[1], sys.argv[2])
 
+if False:
     time.sleep(60)
     libcool.clearStat()
     logging.info("Running %s %s", sys.argv[2], sys.argv[1])
+    start = time.time()  
     c = libcool.runConfiguration(sys.argv[2], sys.argv[1])
-    time.sleep(60 * 60)
+    time.sleep((60 * 60) - (time.time() - start))
     libcool.stopContext(c)
     c["logger"].join()
     logging.info("Finished %s %s", sys.argv[2], sys.argv[1])
 
 if False:
-    libcool.setCool()
     time.sleep(60)
     libcool.clearStat()
-    libcool.setHot()
     logging.info("Running %s %s, switch at 10min", sys.argv[1], sys.argv[2])
+    start = time.time()
     c = libcool.runConfiguration(sys.argv[1], sys.argv[2], extag = "switch-")
-    time.sleep(10 * 60)
+    time.sleep((10 * 60) - (time.time() - start))
+    start = time.time()
     libcool.switchContext(c)
-    time.sleep(50 * 60)
+    time.sleep((50 * 60) - (time.time() - start))
     libcool.stopContext(c)
     c["logger"].join()
     logging.info("Finished %s %s", sys.argv[1], sys.argv[2])
 
-    libcool.setCool()
     time.sleep(60)
     libcool.clearStat()
-    libcool.setHot()
     logging.info("Running %s %s, switch at 10min", sys.argv[2], sys.argv[1])
+    start = time.time()
     c = libcool.runConfiguration(sys.argv[2], sys.argv[1], extag = "switch-")
-    time.sleep(10 * 60)
+    time.sleep((10 * 60) - (time.time() - start))
+    start = time.time()
     libcool.switchContext(c)
-    time.sleep(50 * 60)
+    time.sleep((50 * 60) - (time.time() -start))
     libcool.stopContext(c)
     c["logger"].join()
     logging.info("Finished %s %s", sys.argv[2], sys.argv[1])
