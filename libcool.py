@@ -14,10 +14,10 @@ def bumpPid(mic, num):
         stdout = subprocess.check_output("sudo ssh %s 'true & echo $!'" % mic, shell=True)
         last = int(stdout)
 
-def runApp(app, node, tag):
+def runApp(prefix, app, node, tag):
     uid = str(uuid.uuid1())
-    fout = "/home/cc/exp/log/%s-%s.out" % (app, tag)
-    ferr = "/home/cc/exp/log/%s-%s.err" % (app, tag)
+    fout = "/home/cc/exp/log/%s-%s-%s.out" % (prefix, app, tag)
+    ferr = "/home/cc/exp/log/%s-%s-%s.err" % (prefix, app, tag)
     if True:
         #print "enter cr_run"
         #print str(datetime.datetime.now())
@@ -84,8 +84,9 @@ def runConfiguration(app1, app2, logger = True, extag = "", repeat = False):
     context = {}
     context["datetime"] = datetime.datetime.now()
     ts = context["datetime"].strftime("%Y-%m-%d-%H-%M-%S.%f")
-    c1 = runApp(app1, "0", ts)
-    c2 = runApp(app2, "1", ts)
+    prefix = "%s-%s" % (app1, app2)
+    c1 = runApp(prefix, app1, "0", ts)
+    c2 = runApp(prefix, app2, "1", ts)
     context["app1"] = c1
     context["app2"] = c2
     if logger:
@@ -101,7 +102,7 @@ def runOneNode(app, mic, logger = True, extag = "", repeat = False):
     context = {}
     context["datetime"] = datetime.datetime.now()
     ts = context["datetime"].strftime("%Y-%m-%d-%H-%M-%S.%f")
-    c = runApp(app, mic, ts)
+    c = runApp("", app, mic, ts)
     context["app1"] = c
     if logger:
         logger = MicLogger("coolr1-%s%s-%s" % (extag, app, "NONE"), context)
