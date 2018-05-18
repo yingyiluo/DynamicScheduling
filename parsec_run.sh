@@ -74,15 +74,19 @@ do
        (time numactl --cpunodebind=1 --membind=1 $exs/$y ${optmap[$y]}) 1>$logfy 2>$errfy &
        ypid=$!
 
-       sleep 1600s
+       sleep 1560s
        #wait $xpid
        if ps -p $xpid > /dev/null
        then
           kill -9 $xpid
+       else 
+          echo ${x}-${ts}
        fi
        if ps -p $ypid > /dev/null
        then
           kill -9 $ypid
+       else
+          echo ${y}-${ts}
        fi
 
        stopstat
