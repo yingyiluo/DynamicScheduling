@@ -68,10 +68,10 @@ do
        
        echo ${x}-on-node0
        echo ${y}-on-node1  
-       (time numactl --cpunodebind=0 --membind=0 $exs/$x ${optmap[$x]}) 1>$logfx 2>$errfx &
+       numactl --cpunodebind=0 --membind=0 $exs/$x ${optmap[$x]} 1>$logfx 2>$errfx &
        xpid=$!
 
-       (time numactl --cpunodebind=1 --membind=1 $exs/$y ${optmap[$y]}) 1>$logfy 2>$errfy &
+       numactl --cpunodebind=1 --membind=1 $exs/$y ${optmap[$y]} 1>$logfy 2>$errfy &
        ypid=$!
 
        sleep 1560s
