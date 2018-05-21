@@ -63,8 +63,9 @@ class XGBoost():
             "init": None,
             "verbose": 0,
             "warm_start": False,
-            "random_state": None,
+            "random_state": 0,
             "presort": "auto",
+            "seed": 0,
         }
         self.args = params
         self.models = []
@@ -87,6 +88,7 @@ class XGBoost():
         print(self.args, self.X.shape, self.y.shape)
         X = self.X
         y = self.y
+        #print(X)
         if self.m is not None and self.m < len(self.X):
             sels = random.choice(X.shape[0], self.m, replace = False)
             X = X[sels]

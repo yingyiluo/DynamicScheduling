@@ -39,8 +39,10 @@ def stdWorkloads(workloads):
             i += 1
 
 
-tgtlist = ["%s_0" % x for x in libdata.phyattrs + libdata.fans] + ["%s_1" % x for x in libdata.phyattrs if x not in libdata.fanGs.keys()]
+#tgtlist = ["%s_0" % x for x in libdata.phyattrs + libdata.fans] + ["%s_1" % x for x in libdata.phyattrs if x not in libdata.fanGs.keys()]
+tgtlist = ["power_0", "power_1", "fanpower"]
 applist = ["%s_%d" % (x, i) for x in libdata.apprates for i in [0,1]]
+
 def getdata(apphist, tgthist, dt):
     dfapp = pd.DataFrame(apphist)[applist]
     try:
@@ -69,8 +71,8 @@ def getdata(apphist, tgthist, dt):
 def evolve(model, df, dt):
     apphist = []
     phyhist = []
-    est1 = fanest.FSMFanEst(df.iloc[dt],key='tpkg_0',fankey='FanGroup1_0')
-    est2 = fanest.FSMFanEst(df.iloc[dt],key='tpkg_1',fankey='FanGroup3_0')
+#    est1 = fanest.FSMFanEst(df.iloc[dt],key='tpkg_0',fankey='FanGroup1_0')
+#    est2 = fanest.FSMFanEst(df.iloc[dt],key='tpkg_1',fankey='FanGroup3_0')
     for t in range(0, dt):
         apphist.append(df[applist].iloc[t])
         phyhist.append(df[tgtlist].iloc[t])
@@ -82,14 +84,14 @@ def evolve(model, df, dt):
         # ttgt[1] = phyhist[-1][1] + ttgt[0]
         # print phyhist[-1], ttgt
         ttgt = pd.DataFrame(data=ttgt, columns = tgtlist).iloc[0]
-        fan1est = est1.estFanTarget(ttgt)
-        fan2est = est2.estFanTarget(ttgt)
+#        fan1est = est1.estFanTarget(ttgt)
+#        fan2est = est2.estFanTarget(ttgt)
 
-        ttgt['FanGroup1_0'] = est1.updateTarget(fan1est)
-        ttgt['FanGroup3_0'] = est2.updateTarget(fan2est)
+#        ttgt['FanGroup1_0'] = est1.updateTarget(fan1est)
+#        ttgt['FanGroup3_0'] = est2.updateTarget(fan2est)
 
-        ttgt['tpkg_0'] = ttgt['dtemp_0'] + phyhist[-1]['tpkg_0']
-        ttgt['tpkg_1'] = ttgt['dtemp_1'] + phyhist[-1]['tpkg_1']
+#        ttgt['tpkg_0'] = ttgt['dtemp_0'] + phyhist[-1]['tpkg_0']
+#        ttgt['tpkg_1'] = ttgt['dtemp_1'] + phyhist[-1]['tpkg_1']
 
         # print ttgt.values.shape
         phyhist.append(ttgt)
@@ -125,12 +127,18 @@ def trainModel(arg):
     model, hi, nTrain, dt, apps_train = arg 
     #apps_validation.append(temp[1])
 
-    for app0 in apps_train:
-        for app1 in apps_train:
-            df = pickdf(hi, app0, app1)[:nTrain]
+#    for app0 in apps_train:
+#        for app1 in apps_train:
+#            if app0 == app1:
+#                continue
+#            df = pickdf(hi, app0, app1)[:nTrain]
+    if True:
+        if True:
+            df = db[hi]['df'][:nTrain]
             #print('df shape')
             #print(df.shape)
             data = getdata(df, df, dt)
+            data.to_csv('traindata.csv')
             #print('data shape')
             #print(data.shape)
             target = df[dt:][tgtlist]
@@ -231,7 +239,7 @@ def pairOpt(workloads):
     ax.plot(perflog.index, perflog['realized'], 'r')
     ax.plot(perflog.index, perflog['predicted'], 'b')
     fig.suptitle(','.join(workloads))
-    fig.savefig(optpdf, format='pdf')
+    #fig.savefig(optpdf, format='pdf')
     return [table['app'].loc[idx(hi, ni)] for hi in machines for ni in range(2)]
 
 def _pair_predict_fan(model, hi, app0, app1, dt = 1, cache = {}):
@@ -301,7 +309,7 @@ def pairOptFan(workloads):
     ax.plot(perflog.index, perflog['realized'])
     ax.plot(perflog.index, perflog['predicted'])
     fig.suptitle(','.join(workloads))
-    fig.savefig(optpdffan, format='pdf')
+   # fig.savefig(optpdffan, format='pdf')
     return [table[app].loc[hi] for hi in machines for app in ['app0', 'app1']]
 
 def optWorkloads(workloads):
@@ -348,14 +356,15 @@ def mcRuns(workloads, nRuns = 1000):
 def getFanPwr(rpm, pwr):
     return lambda x: pwr * ((x / rpm) ** 3.)
 
-def evalAccuracy(nTests = 1000, targets = ['tpkg_0', 'tpkg_1'], apps_validation = []):
+def evalAccuracy(nTests = 1000, targets = ['fanpower', 'power_0', 'power_1'], apps_validation = []):
     err = { j + 1 : { x : [] for x in targets } for j in range(len(machines)) }
     for i in range(nTests):
         print(apps_validation)
         workloads = random.choice(apps_validation, size=len(machines) * 2)
         for j in range(len(machines)):
             hi = j + 1 
-            df = pickdf(hi, workloads[j * 2], workloads[j * 2 + 1])[200:200+300]
+#            df = pickdf(hi, workloads[j * 2], workloads[j * 2 + 1])[600:600+300]
+            df = db[hi]['df'][600:600+600]
             phyhist = evolve(models[hi], df, 1)
             for x in targets:
                 #print('phyhist')
@@ -369,7 +378,24 @@ def evalAccuracy(nTests = 1000, targets = ['tpkg_0', 'tpkg_1'], apps_validation 
     #totres = np.mean(list(flatten(res)))
     totres = np.mean([np.mean(list(e.values())) for e in list(res.values())])
     print(totres)
-
+    plt.figure(figsize = (20,2))
+    plt.plot([x/60.0 for x in range(1, 601)], phyhist['fanpower'], 'r', label='predict')
+    plt.plot([x/60.0 for x in range(1, 601)], df['fanpower'], 'b', label='actual')
+    plt.legend(loc=1)
+    plt.savefig('%s/coolr/prediction/run-%d-fanpower-%s-%s.png' % (homedir, hi, app0, app1))
+    plt.close()
+    plt.figure(figsize = (20,2))
+    plt.plot([x/60.0 for x in range(1, 601)], phyhist['power_0'], 'r', label='predict')
+    plt.plot([x/60.0 for x in range(1, 601)], df['power_0'], 'b', label='actual')
+    plt.legend(loc=1)
+    plt.savefig('%s/coolr/prediction/run-%d-power0-%s-%s.png' % (homedir, hi, app0, app1))
+    plt.close()
+    plt.figure(figsize = (20,2))
+    plt.plot([x/60.0 for x in range(1, 601)], phyhist['power_1'], 'r', label='predict')
+    plt.plot([x/60.0 for x in range(1, 601)], df['power_1'], 'b', label='actual')
+    plt.legend(loc=1)
+    plt.savefig('%s/coolr/prediction/run-%d-power1-%s-%s.png' % (homedir, hi, app0, app1))
+    plt.close()
 def testPop(nTests = 1000):
     df = []
     optcmp = []
@@ -453,7 +479,7 @@ NRUNS = 600
 NTESTS = 10
 
 dt = 1
-nTrain = 3000
+nTrain = 600
 
 if __name__ == '__main__':
     parser = ArgumentParser()
@@ -468,28 +494,24 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     tag = args.tag
-    optpdf = PdfPages('pdfs/optpdf-%s.pdf' % tag)
-    optpdffan = PdfPages('pdfs/optpdf-fan-%s.pdf' % tag)
-
+    
+    app0 = 'bt.C.x'
+    app1 = 'cg.C.x'
     db = {}
     for hi in machines:
         db[hi] = {}
         for ni in range(2):
             db[hi][ni] = {}
             dbni = db[hi][ni]
-            fname = '%s/coolr/data/stats/%s/run-%d/stat-node%d.log' % (homedir, tag, hi, ni)
+            if ni == 0:
+                appx = app0
+            if ni == 1:
+                appx = app1
+            fname = '%s/coolr/data/stats/%s/run-%d/coolr1-1000000-%s-%s-node%d-stat.log' % (homedir, tag, hi, app0, app1, ni)
             dbni['df'] = libdata.procdf(libdata.json2df(open(fname, 'r')))
-            for app0 in apps:
-                dbni[app0] = {}
-                if ni == 0:
-                    appx = app0
-                for app1 in apps:
-                    if ni == 1:
-                        appx = app1
-                    fname = '%s/coolr/data/stats/%s/run-%d/coolr1-1000000-%s-%s-%s-node%d-stat.log' % (homedir, tag, hi, app0, app1, appx, ni)
-                    dbni[app0][app1] = libdata.parseApp(open(fname, 'r'))
+
         db[hi]['df'] = libdata.merge2df(db[hi][0]['df'], db[hi][1]['df'])
-        #print(db)
+        db[hi]['df'].to_csv('test.csv')
 
     
     models = {}
@@ -509,35 +531,34 @@ if __name__ == '__main__':
 		"init": None,
 		"verbose": 0,
 		"warm_start": False,
-		"random_state": None,
+		"random_state": 0,
 		"presort": "auto",
     }
-    for eval_times in range(6):
+    for eval_times in range(1):
         pool = mp.Pool(mp.cpu_count()) 
         totrain = []
         print(len(machines))
         
-        apps_train = rand.sample(libdata.apps, 8)
+#        apps_train = rand.sample(libdata.apps, 6)
         #print(list(apps_train))
-        temp = list(set(libdata.apps) - set(list(apps_train)))
-        apps_validation = temp #.append(temp[0])
+#        temp = list(set(libdata.apps) - set(list(apps_train)))
+#        apps_validation = temp #.append(temp[0])
         
         for hi in machines:
             model = model_xgb.XGBoost()
-            model.init(**param)
-            totrain.append((model, hi, nTrain, dt, apps_train))
+            model.init(**params)
+            totrain.append((model, hi, nTrain, dt, ['d']))
 
+        print(nTrain)
         lmodels = pool.map(trainModel, totrain)
         #print(len(lmodels))
         for i in range(len(lmodels)):
             models[i+1] = lmodels[i]
         pool.close()
         pool.join()
-        evalAccuracy(nTests = 1, apps_validation = apps_validation)
+        evalAccuracy(nTests = 1, apps_validation = ['d'])
     pool = mp.Pool(mp.cpu_count())
 #    print(testPop(nTests = NTESTS))
 #    # print(testDual())
     pool.close()
     pool.join()
-    optpdf.close()
-    optpdffan.close()

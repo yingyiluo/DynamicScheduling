@@ -6,15 +6,18 @@ import getpass
 import os
 
 machines = range(1,5)
-apps = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ep.D.x', 'ft.B.x', 'is.C.x', 'lu.C.x', 'mg.B.x', 'sp.C.x', 'ua.C.x']
+apps = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.C.x', 'ua.C.x']
 apps_train = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ep.D.x', 'ft.B.x', 'is.C.x', 'lu.C.x']
 apps_validation = ['mg.B.x', 'sp.C.x', 'ua.C.x']
 
 fanGs = { 'FanGroup1' : ['Fan1A', 'Fan1B', 'Fan2A', 'Fan2B', 'Fan3A', 'Fan3B'], 'FanGroup2' : ['Fan4A', 'Fan4B'], 'FanGroup3' : ['Fan5A', 'Fan5B', 'Fan6A', 'Fan6B', 'Fan7A', 'Fan7B'] }
 appattrs = ['cyc', 'inst', 'llcref', 'llcmiss', 'br', 'brmiss', 'l2lin']
-phyattrs = ['dtemp', 'tpkg', 'power', 'FanGroup1', 'FanGroup3']
+phyattrs = ['power', 'fanpower']
 apprates = ["%s_rate" % x for x in appattrs]
 homedir = os.environ['HOME']
+
+def getFanPwr(rpm, pwr):
+	return lambda x: pwr * ((x / rpm) ** 3.)
 
 def flatten(x):
     if isinstance(x, dict):
@@ -35,11 +38,12 @@ def json2df(jfile):
 def procdf(df):
     df['irate'] = df['inst'] / df['intv']
     df['power'] = df['energy'] / (2 ** df['eunit']) / df['intv'] * 1e9
-    df['dtemp'] = df['tpkg'] - df['tpkg'].shift(1)
+   # df['dtemp'] = df['tpkg'] - df['tpkg'].shift(1)
     for attr in appattrs:
         df[attr + '_rate'] = df[attr] / df['intv']
-    for g in fanGs:
-        df[g] = df[fanGs[g]].mean(axis=1)
+    df['fanpower'] = df[['%s' % x for x in fans]].apply(getFanPwr(12000.,7.)).sum(axis=1) 
+#    for g in fanGs:
+#        df[g] = df[fanGs[g]].mean(axis=1)
     return df
 
 def merge2df(df1, df2, ts = 'ts'):
@@ -71,11 +75,13 @@ def merge2df(df1, df2, ts = 'ts'):
     df2 = df2.copy()
     df1.columns = ["%s_0" % x for x in df1.columns] 
     df2.columns = ["%s_1" % x for x in df2.columns]
-
+    df1.rename(columns = {'fanpower_0':'fanpower'}, inplace = True)
+    df2.drop('fanpower_1', axis=1, inplace=True)
+  
     df = pd.concat([df1, df2.shift(idts)], axis=1).dropna()
     df['ts'] = df[['ts_0', 'ts_1']].max(axis=1)
     df['dts'] = df['ts_0'] - df['ts_1']
-
+    
     return df
 
 def pickapp(df, nid, sts, ets):
