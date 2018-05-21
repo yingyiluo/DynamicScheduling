@@ -5,12 +5,13 @@ import os
 import numpy as np
 
 #homedir = '/home/cc'
-tag = 'May8-2018'
+tag = 'May13-2018'
 csvdir = os.environ['HOME']
 #apps1 = [['bt.C.x', 'ft.B.x'], ['ft.B.x', 'ua.C.x']]
 #apps1 = [['mg.B.x', 'ua.C.x'], ['bt.C.x', 'mg.B.x']] 
 #apps1 = [['cg.C.x', 'ft.B.x']]
-apps1 = [['lu.C.x', 'ep.D.x']]
+#apps1 = [['bt.C.x', 'dc.B.x'], ['lu.C.x', 'bt.C.x']]
+apps1 = [['lu.C.x', 'ua.C.x'], ['dc.B.x', 'ua.C.x']]
 #machines = range(1, 2)
 machines = range(2, 3)
 nodes = range(0, 2)
@@ -38,8 +39,8 @@ def procdf(df):
 if __name__ == '__main__':
 	for hi in machines:
 		for appPair in apps1:
-			app_fname1 = '%s/exp/data/%s/run-%d/coolr1-1000000-%s-%s-node0-stat.log' % (csvdir, tag, hi, appPair[0], appPair[1])
-			app_fname2 = '%s/exp/data/%s/run-%d/coolr1-1000000-%s-%s-node1-stat.log' % (csvdir, tag, hi, appPair[0], appPair[1])
+			app_fname1 = '%s/coolr/data/stats/%s/run-%d/coolr1-1000000-%s-%s-node0-stat.log' % (csvdir, tag, hi, appPair[0], appPair[1])
+			app_fname2 = '%s/coolr/data/stats/%s/run-%d/coolr1-1000000-%s-%s-node1-stat.log' % (csvdir, tag, hi, appPair[0], appPair[1])
 			df_app1 = procdf(json2df(open(app_fname1, 'r')))
 			df_app2 = procdf(json2df(open(app_fname2, 'r')))
 			#if df_app1.shape[0] < df_app2.shape[0]:
@@ -48,9 +49,9 @@ if __name__ == '__main__':
 			#	df_app = df_app1
 			print df_app1.shape[0]
 			# get the data for the first half hour
-			df_app = df_app1.iloc[0:1200]
+			df_app = df_app1.iloc[0:1500]
 			fan = df_app[['%s' % x for x in fans]].apply(getFanPwr(12000.,7.)).sum(axis=1)
 			#time = df_app['ts']
 			#frames = [fan, time]
 			#result = pd.concat(frames)
-			fan.to_csv('/home/cc/exp/fandata/run-%d-%s-%s-stat.csv' % (hi, appPair[0], appPair[1]))
+			fan.to_csv('/home/yingyi/coolr/analyzeddata/run-%d-%s-%s-stat.csv' % (hi, appPair[0], appPair[1]))
