@@ -1,10 +1,10 @@
-#!/usr/bin/pythnon3
+#!/usr/bin/python3
 
 import numpy as np
 import numpy.random as random
-import xgboost as xgb
+import sklearn.gaussian_process as gau_proc
 
-class XGBoost():
+class GPR():
     def __init__(self):
         self.X = None
         self.y = None
@@ -19,56 +19,19 @@ class XGBoost():
         if 'm' in args:
             self.m = args['m']
             del args['m']
-        if 'num_rounds' in args:
-            self.num_rounds = args['num_rounds']
-        else:
-            self.num_rounds = 2
         self.args = args
         self.models = []
         # self.SD = libadvgauss.ivmGP(m = m, corr = corr, hyper = hyper, dcorr = dcorr, normalize = normalize, sigma = sigma, theta = theta, regr = regr)
-        # self.model = ensemble.GradientBoostingRegressor(**args)
+        self.model = gau_proc.GaussianProcessRegressor(**args)
 
     def default(self):
         # Good # 1
         params = {
-            "loss": "quantile",
-            "learning_rate": 0.1,
-            "n_estimators": 100,
-            "max_depth": 3,
-            "min_samples_split": 2,
-            "min_samples_leaf": 1,
-            "min_weight_fraction_leaf": 0.,
-            "subsample": 1.,
-            "max_features": "sqrt",
-            "max_leaf_nodes": None,
-            "alpha": 0.9,
-            "init": None,
-            "verbose": 0,
-            "warm_start": False,
-            "random_state": None,
-            "presort": "auto",
-        }
-        params = {
-            "loss": "ls",
-            "learning_rate": 0.1,
-            "n_estimators": 100,
-            "max_depth": 3,
-            "min_samples_split": 2,
-            "min_samples_leaf": 1,
-            "min_weight_fraction_leaf": 0.,
-            "subsample": 1.,
-            "max_features": "sqrt",
-            "max_leaf_nodes": None,
-            "alpha": 0.9,
-            "init": None,
-            "verbose": 0,
-            "warm_start": False,
-            "random_state": 0,
-            "presort": "auto",
-            "seed": 0,
+            'n_restarts_optimizer': 0,
         }
         self.args = params
         self.models = []
+        self.model = gau_proc.GaussianProcessRegressor(**params)
 
     def train(self, X, y):
         if self.X is None:
@@ -85,19 +48,25 @@ class XGBoost():
         return self.X, self.y
 
     def fit(self):
-        #print(self.args, self.X.shape, self.y.shape)
+        print(self.args, self.X.shape, self.y.shape)
         X = self.X
         y = self.y
-        #print(X)
         if self.m is not None and self.m < len(self.X):
             sels = random.choice(X.shape[0], self.m, replace = False)
             X = X[sels]
             y = y[sels]
         self.nys = y.shape[1]
         for i in range(self.nys):
-            self.models.append(xgb.XGBModel(**self.args))
+            self.models.append(gau_proc.GaussianProcessRegressor(**self.args))
             self.models[i].fit(X, y[:,i])
-
+            #if i == 0:
+                #print('find column for dtemp0')
+                #feature_importance = self.models[i].feature_importances_
+                #feature_importance = 100.0 * (feature_importance / feature_importance.max())
+                #sorted_idx = np.argsort(feature_importance)
+                #pos = np.arange(sorted_idx.shape[0]) + .5
+                #print(feature_importance)
+                
     def predict(self, X):
         ys = None
         for i in range(self.nys):

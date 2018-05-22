@@ -10,11 +10,13 @@ import numpy.random as random
 import json
 import pandas as pd
 import model_xgb
-import fanest
+import model_lr
+import model_svr
+import model_gp
+import model_mlp
 import numpy as np
 import os
 import libdata
-from sklearn.linear_model import LinearRegression as lr
 import datetime
 # import mclearn
 import getpass
@@ -24,7 +26,8 @@ from argparse import ArgumentParser
 
 #machines = range(1,17)
 machines = range(1, 2)
-apps = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.C.x', 'ua.C.x']
+#apps = ['blackscholes', 'canneal', 'ferret', 'freqmine', 'bodytrack', 'bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.D.x', 'ua.C.x']
+apps = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.D.x', 'ua.C.x']
 homedir = os.environ['HOME']
 #apps_validation = ['bt.C.x', 'cg.C.x']
 
@@ -38,8 +41,6 @@ def stdWorkloads(workloads):
             yield (workloads[i * 2], workloads[i * 2 + 1])
             i += 1
 
-
-#tgtlist = ["%s_0" % x for x in libdata.phyattrs + libdata.fans] + ["%s_1" % x for x in libdata.phyattrs if x not in libdata.fanGs.keys()]
 tgtlist = ["power_0", "power_1", "fanpower"]
 applist = ["%s_%d" % (x, i) for x in libdata.apprates for i in [0,1]]
 
@@ -58,6 +59,7 @@ def getdata(apphist, tgthist, dt):
     dftgt = dftgt.reindex(dfapp.index)
 
     df = dfapp
+    #print(df.columns)
     for t in range(1, dt+1):
         for sdf in [dfapp, dftgt]:
             shifted = sdf.shift(t)
@@ -68,16 +70,21 @@ def getdata(apphist, tgthist, dt):
 
     return df.dropna()
 
-def evolve(model, df, dt):
+def evolve(model, df, dfapp, dt):
     apphist = []
     phyhist = []
+    dfapp_len = len(dfapp)-1
 #    est1 = fanest.FSMFanEst(df.iloc[dt],key='tpkg_0',fankey='FanGroup1_0')
 #    est2 = fanest.FSMFanEst(df.iloc[dt],key='tpkg_1',fankey='FanGroup3_0')
     for t in range(0, dt):
-        apphist.append(df[applist].iloc[t])
+       # r = rand.randint(0, dfapp_len)
+        r = t % dfapp_len
+        apphist.append(dfapp[applist].iloc[r])
         phyhist.append(df[tgtlist].iloc[t])
     for i in range(dt, len(df)):
-        apphist.append(df[applist].iloc[i])
+      #  r = rand.randint(0, dfapp_len)
+        r = i % dfapp_len
+        apphist.append(dfapp[applist].iloc[r])
         tsample = getdata(apphist[-dt-1:], phyhist[-dt:], dt).iloc[-1]
         ttgt = model.predict(tsample.values.reshape(1,-1))
         # fix ttgt = ttgt' + dtemp
@@ -125,8 +132,8 @@ def _pair_predict(model, hi, app0, app1, dt = 1, cache = {}):
 
 def trainModel(arg):
     model, hi, nTrain, dt, apps_train = arg 
-    #apps_validation.append(temp[1])
-
+    app0 = apps_train[0]
+    app1 = apps_train[1] 
 #    for app0 in apps_train:
 #        for app1 in apps_train:
 #            if app0 == app1:
@@ -134,8 +141,9 @@ def trainModel(arg):
 #            df = pickdf(hi, app0, app1)[:nTrain]
     if True:
         if True:
-            df = db[hi]['df'][:nTrain]
-            #print('df shape')
+            df = db[hi]['%s-%s' % (app0, app1)][:nTrain]
+            
+            #print(df.columns)
             #print(df.shape)
             data = getdata(df, df, dt)
             data.to_csv('traindata.csv')
@@ -357,15 +365,15 @@ def getFanPwr(rpm, pwr):
     return lambda x: pwr * ((x / rpm) ** 3.)
 
 def evalAccuracy(nTests = 1000, targets = ['fanpower', 'power_0', 'power_1'], apps_validation = []):
+    app0 = apps_validation[0]
+    app1 = apps_validation[1]
     err = { j + 1 : { x : [] for x in targets } for j in range(len(machines)) }
     for i in range(nTests):
-        print(apps_validation)
-        workloads = random.choice(apps_validation, size=len(machines) * 2)
         for j in range(len(machines)):
             hi = j + 1 
-#            df = pickdf(hi, workloads[j * 2], workloads[j * 2 + 1])[600:600+300]
-            df = db[hi]['df'][600:600+600]
-            phyhist = evolve(models[hi], df, 1)
+            df = db[hi]['%s-%s' % (app0, app1)][nTrain:nTrain+interval]
+            dfapp = db[hi]['%s-%s' % (app0, app1)][nTrain-120:nTrain]
+            phyhist = evolve(models[hi], df, dfapp, dt)
             for x in targets:
                 #print('phyhist')
                 #print(phyhist[x])
@@ -374,28 +382,22 @@ def evalAccuracy(nTests = 1000, targets = ['fanpower', 'power_0', 'power_1'], ap
                 #print(phyhist[x].values - df[x].values)
                 err[hi][x].append(np.mean(np.abs(phyhist[x].values - df[x].values)))
     res = { j + 1 : { x : np.mean(err[j + 1][x]) for x in targets } for j in range(len(machines)) }
-    print(res)
+    #print(res)
     #totres = np.mean(list(flatten(res)))
     totres = np.mean([np.mean(list(e.values())) for e in list(res.values())])
-    print(totres)
-    plt.figure(figsize = (20,2))
-    plt.plot([x/60.0 for x in range(1, 601)], phyhist['fanpower'], 'r', label='predict')
-    plt.plot([x/60.0 for x in range(1, 601)], df['fanpower'], 'b', label='actual')
-    plt.legend(loc=1)
-    plt.savefig('%s/coolr/prediction/run-%d-fanpower-%s-%s.png' % (homedir, hi, app0, app1))
-    plt.close()
-    plt.figure(figsize = (20,2))
-    plt.plot([x/60.0 for x in range(1, 601)], phyhist['power_0'], 'r', label='predict')
-    plt.plot([x/60.0 for x in range(1, 601)], df['power_0'], 'b', label='actual')
-    plt.legend(loc=1)
-    plt.savefig('%s/coolr/prediction/run-%d-power0-%s-%s.png' % (homedir, hi, app0, app1))
-    plt.close()
-    plt.figure(figsize = (20,2))
-    plt.plot([x/60.0 for x in range(1, 601)], phyhist['power_1'], 'r', label='predict')
-    plt.plot([x/60.0 for x in range(1, 601)], df['power_1'], 'b', label='actual')
-    plt.legend(loc=1)
-    plt.savefig('%s/coolr/prediction/run-%d-power1-%s-%s.png' % (homedir, hi, app0, app1))
-    plt.close()
+    #print(totres)
+    prediction = pd.concat([db[1]['%s-%s' % (app0, app1)][targets][:nTrain], phyhist], sort='True')
+    actual = db[hi]['%s-%s' % (app0, app1)][:nTrain+interval]
+    for t in targets:
+        plt.figure(figsize = (10,2))
+        plt.plot([x/60.0 for x in range(1, nTrain+interval+1)], prediction['%s' % t], 'r', label='predict')
+        plt.plot([x/60.0 for x in range(1, nTrain+interval+1)], actual['%s' % t], 'b', label='actual')
+        plt.legend(loc=1)
+        print('%s/coolr/prediction/run-%d-%s-%s-%s.png' % (homedir, hi, t, app0, app1))
+        plt.savefig('%s/coolr/prediction/run-%d-%s-%s-%s.png' % (homedir, hi, t, app0, app1))
+        plt.close()
+    return res
+
 def testPop(nTests = 1000):
     df = []
     optcmp = []
@@ -479,10 +481,11 @@ NRUNS = 600
 NTESTS = 10
 
 dt = 1
-nTrain = 600
 
 if __name__ == '__main__':
+    rand.seed(0)
     parser = ArgumentParser()
+    parser.add_argument('-ml', '--model', dest='ml_method', action='store', help='ml method', default='xgb')
     parser.add_argument('-l', '--loss', dest='loss', action='store', help='loss function', default='quantile')
     parser.add_argument('-a', '--alpha', dest='alpha', type=float, action='store', help='alpha', default=0.9)
     parser.add_argument('-r', '--learning_rate', dest='learning_rate', type=float, action='store', help='learning_rate', default=0.1)
@@ -491,31 +494,38 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--n_estimators', dest='n_estimators', type=int, action='store', help='n estimators', default=100)
     parser.add_argument('-m', '--max_samples', dest='max_samples', type=int, action='store', help='max samples', default=5000)
     parser.add_argument('-o', '--optimizer', dest='opt', action='store', default='naive')
+    parser.add_argument('-nt', '--nTrain', dest='nTrain', type=int, action='store', help='n trains', default=600)
+    parser.add_argument('-i', '--interval', dest='interval', type=int, action='store', help='internal', default=300)
     args = parser.parse_args()
 
     tag = args.tag
-    
-    app0 = 'bt.C.x'
-    app1 = 'cg.C.x'
+    nTrain = args.nTrain
+    interval = args.interval
+    ml_method = args.ml_method
+
+    #app0 = 'ft.B.x'
+    #app1 = 'dc.B.x'
     db = {}
     for hi in machines:
         db[hi] = {}
-        for ni in range(2):
-            db[hi][ni] = {}
-            dbni = db[hi][ni]
-            if ni == 0:
-                appx = app0
-            if ni == 1:
-                appx = app1
-            fname = '%s/coolr/data/stats/%s/run-%d/coolr1-1000000-%s-%s-node%d-stat.log' % (homedir, tag, hi, app0, app1, ni)
-            dbni['df'] = libdata.procdf(libdata.json2df(open(fname, 'r')))
+        for app0 in apps:
+            for app1 in apps:
+#                if app0 == app1:
+#                    continue
+                for ni in range(2):
+                    db[hi][ni] = {}
+                    dbni = db[hi][ni]
+                    if ni == 0:
+                        appx = app0
+                    if ni == 1:
+                        appx = app1
+                    fname = '%s/coolr/data/stats/%s/run-%d/coolr1-1000000-%s-%s-node%d-stat.log' % (homedir, tag, hi, app0, app1, ni)
+                    dbni['df'] = libdata.procdf(libdata.json2df(open(fname, 'r')))
 
-        db[hi]['df'] = libdata.merge2df(db[hi][0]['df'], db[hi][1]['df'])
-        db[hi]['df'].to_csv('test.csv')
-
+                db[hi]['%s-%s' % (app0, app1)] = libdata.merge2df(db[hi][0]['df'], db[hi][1]['df'])
+      #  db[hi]['bt.C.x-ft.B.x'].to_csv('test.csv')
     
     models = {}
-    
     params = {
         "loss": "quantile",
         "learning_rate": 0.1,
@@ -534,31 +544,79 @@ if __name__ == '__main__':
 		"random_state": 0,
 		"presort": "auto",
     }
-    for eval_times in range(1):
-        pool = mp.Pool(mp.cpu_count()) 
-        totrain = []
-        print(len(machines))
-        
-#        apps_train = rand.sample(libdata.apps, 6)
-        #print(list(apps_train))
-#        temp = list(set(libdata.apps) - set(list(apps_train)))
-#        apps_validation = temp #.append(temp[0])
-        
-        for hi in machines:
-            model = model_xgb.XGBoost()
-            model.init(**params)
-            totrain.append((model, hi, nTrain, dt, ['d']))
+    if ml_method == 'lr':
+        params = {
+            'fit_intercept': True,
+            'normalize': True,
+            'm': args.max_samples,
+        }
+    elif ml_method == 'svr':
+        params = {
+            'm': args.max_samples,
+        }
+    elif ml_method == 'gp':
+        params = {
+            'n_restarts_optimizer': 0,
+            'm': args.max_samples,
+        }
+    elif ml_method == 'mlp':
+        params = {
+            'hidden_layer_sizes': (100, ),
+            'activation': 'relu',
+            'solver': 'adam',
+            'max_iter': 1000,
+            'm': args.max_samples,
+        }
 
-        print(nTrain)
-        lmodels = pool.map(trainModel, totrain)
-        #print(len(lmodels))
-        for i in range(len(lmodels)):
-            models[i+1] = lmodels[i]
-        pool.close()
-        pool.join()
-        evalAccuracy(nTests = 1, apps_validation = ['d'])
-    pool = mp.Pool(mp.cpu_count())
+    for eval_times in range(1):
+        allres = [] 
+        for app0 in apps:
+            for app1 in apps:  
+               # if app0 == app1:
+               #     continue
+                pool = mp.Pool(mp.cpu_count()) 
+                appPair = [app0, app1]
+                print(appPair)
+                totrain = []
+                for hi in machines:
+                    if ml_method == 'xgb':
+                        model = model_xgb.XGBoost()
+                    if ml_method == 'lr':
+                        model = model_lr.LR()
+                    if ml_method == 'svr':
+                        model = model_svr.SVM()
+                    if ml_method == 'gp':
+                        model = model_gp.GPR()
+                    if ml_method == 'mlp':
+                        model = model_mlp.MLP()
+                    model.init(**params)
+                    totrain.append((model, hi, nTrain, dt, appPair))
+
+                lmodels = pool.map(trainModel, totrain)
+                for i in range(len(lmodels)):
+                    models[i+1] = lmodels[i]
+                pool.close()
+                pool.join()
+                res = evalAccuracy(nTests = 1, apps_validation = appPair)
+                allres.append(res)
+        errs = {}
+        for hi in machines:
+            errs[hi] = {}
+            errs[hi]['fanpower'] = 0
+            errs[hi]['power_0'] = 0
+            errs[hi]['power_1'] = 0
+        for res in allres:
+             for hi in machines:
+                # print(res[hi])
+                 errs[hi]['fanpower'] += res[hi]['fanpower']
+                 errs[hi]['power_0'] += res[hi]['power_0']
+                 errs[hi]['power_1'] += res[hi]['power_1']
+        num_appPairs = len(allres)
+        print(num_appPairs)
+        errs = { hi : {k : v/num_appPairs for k, v in errs[hi].items()} for hi in machines}
+        print(errs)
+#    pool = mp.Pool(mp.cpu_count())
 #    print(testPop(nTests = NTESTS))
 #    # print(testDual())
-    pool.close()
-    pool.join()
+#    pool.close()
+#    pool.join()

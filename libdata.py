@@ -6,9 +6,9 @@ import getpass
 import os
 
 machines = range(1,5)
-apps = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.C.x', 'ua.C.x']
-apps_train = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ep.D.x', 'ft.B.x', 'is.C.x', 'lu.C.x']
-apps_validation = ['mg.B.x', 'sp.C.x', 'ua.C.x']
+apps = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.D.x', 'ua.C.x']
+#apps_train = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ep.D.x', 'ft.B.x', 'is.C.x', 'lu.C.x']
+#apps_validation = ['mg.B.x', 'sp.C.x', 'ua.C.x']
 
 fanGs = { 'FanGroup1' : ['Fan1A', 'Fan1B', 'Fan2A', 'Fan2B', 'Fan3A', 'Fan3B'], 'FanGroup2' : ['Fan4A', 'Fan4B'], 'FanGroup3' : ['Fan5A', 'Fan5B', 'Fan6A', 'Fan6B', 'Fan7A', 'Fan7B'] }
 appattrs = ['cyc', 'inst', 'llcref', 'llcmiss', 'br', 'brmiss', 'l2lin']
