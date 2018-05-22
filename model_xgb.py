@@ -90,10 +90,11 @@ class XGBoost():
         y = self.y
         #print(X)
         if self.m is not None and self.m < len(self.X):
-            sels = random.choice(X.shape[0], self.m, replace = False)
+            sels = random.sample(X.shape[0], self.m, replace = False)
             X = X[sels]
             y = y[sels]
         self.nys = y.shape[1]
+        print(len(X))
         for i in range(self.nys):
             self.models.append(xgb.XGBModel(**self.args))
             self.models[i].fit(X, y[:,i])

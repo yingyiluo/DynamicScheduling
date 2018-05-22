@@ -26,8 +26,8 @@ from argparse import ArgumentParser
 
 #machines = range(1,17)
 machines = range(1, 5)
-#apps = ['blackscholes', 'canneal', 'ferret', 'freqmine', 'bodytrack', 'bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.D.x', 'ua.C.x']
-apps = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.D.x', 'ua.C.x']
+apps = ['blackscholes', 'canneal', 'ferret', 'freqmine', 'bodytrack', 'bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.D.x', 'ua.C.x']
+#apps = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.D.x', 'ua.C.x']
 homedir = os.environ['HOME']
 #apps_validation = ['bt.C.x', 'cg.C.x']
 
@@ -132,23 +132,11 @@ def _pair_predict(model, hi, app0, app1, dt = 1, cache = {}):
 
 def trainModel(arg):
     model, hi, nTrain, dt, apps_train = arg 
-    app0 = apps_train[0]
-    app1 = apps_train[1] 
-#    for app0 in apps_train:
-#        for app1 in apps_train:
-#            if app0 == app1:
-#                continue
-#            df = pickdf(hi, app0, app1)[:nTrain]
-    if True:
-        if True:
-            df = db[hi]['%s-%s' % (app0, app1)][:nTrain]
-            
-            #print(df.columns)
+    for app0 in apps_train:
+        for app1 in apps_train:
+            df = db[hi]['%s-%s' % (app0, app1)][:nTrain] 
             #print(df.shape)
             data = getdata(df, df, dt)
-            data.to_csv('traindata.csv')
-            #print('data shape')
-            #print(data.shape)
             target = df[dt:][tgtlist]
            # print(len(data))
             #print(data.columns.values)
@@ -363,31 +351,24 @@ def mcRuns(workloads, nRuns = 1000):
 def getFanPwr(rpm, pwr):
     return lambda x: pwr * ((x / rpm) ** 3.)
 
-def evalAccuracy(nTests = 1000, targets = ['fanpower', 'power_0', 'power_1'], apps_validation = []):
-    app0 = apps_validation[0]
-    app1 = apps_validation[1]
+def evalAccuracy(targets = ['fanpower', 'power_0', 'power_1'], apps_validation = []):
     err = { j + 1 : { x : [] for x in targets } for j in range(len(machines)) }
-    for i in range(nTests):
-        for j in range(len(machines)):
-            hi = j + 1 
-            df = db[hi]['%s-%s' % (app0, app1)][nTrain:nTrain+interval]
-            dfapp = db[hi]['%s-%s' % (app0, app1)][nTrain-120:nTrain]
-            phyhist = evolve(models[hi], df, dfapp, dt)
-            for x in targets:
-                #print('phyhist')
-                #print(phyhist[x])
-                #print('df')
-                #print(df[x])
-                #print(phyhist[x].values - df[x].values)
-                err[hi][x].append(np.mean(np.abs(phyhist[x].values - df[x].values)))
+    for j in range(len(machines)):
+        hi = j + 1 
+        for app0 in apps_validation:
+           for app1 in apps_validation:
+               df = db[hi]['%s-%s' % (app0, app1)][nTrain:nTrain+interval]
+               dfapp = db[hi]['%s-%s' % (app0, app1)][nTrain-120:nTrain]
+               phyhist = evolve(models[hi], df, dfapp, dt)
+               for x in targets:
+                   err[hi][x].append(np.mean(np.abs(phyhist[x].values - df[x].values)))
     res = { j + 1 : { x : np.mean(err[j + 1][x]) for x in targets } for j in range(len(machines)) }
-    #print(res)
     #totres = np.mean(list(flatten(res)))
     totres = np.mean([np.mean(list(e.values())) for e in list(res.values())])
     #print(totres)
-    prediction = pd.concat([db[hi]['%s-%s' % (app0, app1)][targets][:nTrain], phyhist], sort='True')
-    actual = db[hi]['%s-%s' % (app0, app1)][:nTrain+interval]
-    for t in targets:
+    #prediction = pd.concat([db[hi]['%s-%s' % (app0, app1)][targets][:nTrain], phyhist], sort='True')
+    #actual = db[hi]['%s-%s' % (app0, app1)][:nTrain+interval]
+    for t in range(0):
         plt.figure(figsize = (10,2))
         plt.plot([x/60.0 for x in range(1, nTrain+interval+1)], prediction['%s' % t], 'r', label='predict')
         plt.plot([x/60.0 for x in range(1, nTrain+interval+1)], actual['%s' % t], 'b', label='actual')
@@ -491,7 +472,7 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--depth', dest='depth', type=int, action='store', help='max depth', default=5)
     parser.add_argument('-t', '--tag', dest='tag', action='store', help='tag', default='May13-2018')
     parser.add_argument('-n', '--n_estimators', dest='n_estimators', type=int, action='store', help='n estimators', default=100)
-    parser.add_argument('-m', '--max_samples', dest='max_samples', type=int, action='store', help='max samples', default=5000)
+    parser.add_argument('-m', '--max_samples', dest='max_samples', type=int, action='store', help='max samples', default=10000)
     parser.add_argument('-o', '--optimizer', dest='opt', action='store', default='naive')
     parser.add_argument('-nt', '--nTrain', dest='nTrain', type=int, action='store', help='n trains', default=600)
     parser.add_argument('-i', '--interval', dest='interval', type=int, action='store', help='internal', default=300)
@@ -567,53 +548,50 @@ if __name__ == '__main__':
             'm': args.max_samples,
         }
 
+    allres = [] 
     for eval_times in range(1):
-        allres = [] 
-        for app0 in apps:
-            for app1 in apps:  
-               # if app0 == app1:
-               #     continue
-                pool = mp.Pool(mp.cpu_count()) 
-                appPair = [app0, app1]
-                print(appPair)
-                totrain = []
-                for hi in machines:
-                    if ml_method == 'xgb':
-                        model = model_xgb.XGBoost()
-                    if ml_method == 'lr':
-                        model = model_lr.LR()
-                    if ml_method == 'svr':
-                        model = model_svr.SVM()
-                    if ml_method == 'gp':
-                        model = model_gp.GPR()
-                    if ml_method == 'mlp':
-                        model = model_mlp.MLP()
-                    model.init(**params)
-                    totrain.append((model, hi, nTrain, dt, appPair))
-
-                lmodels = pool.map(trainModel, totrain)
-                for i in range(len(lmodels)):
-                    models[i+1] = lmodels[i]
-                pool.close()
-                pool.join()
-                res = evalAccuracy(nTests = 1, apps_validation = appPair)
-                allres.append(res)
-        errs = {}
+        pool = mp.Pool(mp.cpu_count()) 
+        totrain = []
+        apps_train = rand.sample(libdata.apps, 10)
+        temp = list(set(libdata.apps) - set(list(apps_train)))
+        apps_validation = temp
         for hi in machines:
-            errs[hi] = {}
-            errs[hi]['fanpower'] = 0
-            errs[hi]['power_0'] = 0
-            errs[hi]['power_1'] = 0
-        for res in allres:
-             for hi in machines:
-                # print(res[hi])
-                 errs[hi]['fanpower'] += res[hi]['fanpower']
-                 errs[hi]['power_0'] += res[hi]['power_0']
-                 errs[hi]['power_1'] += res[hi]['power_1']
-        num_appPairs = len(allres)
-        print(num_appPairs)
-        errs = { hi : {k : v/num_appPairs for k, v in errs[hi].items()} for hi in machines}
-        print(errs)
+            if ml_method == 'xgb':
+                model = model_xgb.XGBoost()
+            if ml_method == 'lr':
+                model = model_lr.LR()
+            if ml_method == 'svr':
+                model = model_svr.SVM()
+            if ml_method == 'gp':
+                model = model_gp.GPR()
+            if ml_method == 'mlp':
+                model = model_mlp.MLP()
+            model.init(**params)
+            totrain.append((model, hi, nTrain, dt, apps_train))
+            lmodels = pool.map(trainModel, totrain)
+            for i in range(len(lmodels)):
+                models[i+1] = lmodels[i]
+        pool.close()
+        pool.join()
+        res = evalAccuracy(apps_validation = apps_validation)
+        print(res)
+        allres.append(res)
+    errs = {}
+    for hi in machines:
+        errs[hi] = {}
+        errs[hi]['fanpower'] = 0
+        errs[hi]['power_0'] = 0
+        errs[hi]['power_1'] = 0
+    for res in allres:
+        for hi in machines:
+        # print(res[hi])
+            errs[hi]['fanpower'] += res[hi]['fanpower']
+            errs[hi]['power_0'] += res[hi]['power_0']
+            errs[hi]['power_1'] += res[hi]['power_1']
+    num_times = len(allres)
+    print(num_times)
+    errs = { hi : {k : v/num_times for k, v in errs[hi].items()} for hi in machines}
+    print(errs)
 #    pool = mp.Pool(mp.cpu_count())
 #    print(testPop(nTests = NTESTS))
 #    # print(testDual())
