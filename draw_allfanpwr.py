@@ -16,7 +16,7 @@ homedir = os.environ['HOME']
 #apps = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ep.D.x', 'ft.B.x', 'is.C.x', 'lu.C.x', 'mg.B.x', 'sp.C.x', 'ua.C.x']
 npb_apps = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.D.x', 'ua.C.x'] 
 parsec_apps = ['blackscholes', 'canneal', 'ferret', 'freqmine', 'bodytrack']
-
+apps = ['blackscholes', 'canneal', 'ferret', 'freqmine', 'bodytrack', 'bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.D.x', 'ua.C.x']
 machines = range(0)
 nodes = range(0, 2)
 fans = ['Fan1A', 'Fan1B', 'Fan2A', 'Fan2B', 'Fan3A', 'Fan3B', 'Fan4A', 'Fan4B', 'Fan5A', 'Fan5B', 'Fan6A', 'Fan6B', 'Fan7A', 'Fan7B']
@@ -46,7 +46,7 @@ def pwr_placement(apps, num_machines):
 	bigTable = []
 	labels = ['combination', 'opt_placement', 'pkg_power', 'fan_power', 'min_fan_power', 'max_fan_power', 'avg_fan_power', 'max_power', 'avg_power']
 	for comb in possCombs:
-		print comb
+		print(comb)
 		placements = list(itertools.permutations(comb))
 		min_avg_pwr = 5000
 		max_avg_pwr = 0
@@ -90,7 +90,7 @@ def pwr_placement(apps, num_machines):
 		avg_avg_fanpwr = avg_avg_fanpwr/len(placements)
 		aRow = (comb_str, p_str, min_avg_pwr, this_avg_fanpwr, min_avg_fanpwr, max_avg_fanpwr, avg_avg_fanpwr, max_avg_pwr, avg_avg_pwr)
 		bigTable.append(aRow)
-	print "finished loop"	
+	print("finished loop")	
 	df_bigTable = pd.DataFrame.from_records(bigTable, columns=labels)
 	df_bigTable.to_csv('%s/coolr/analyzeddata/min-power-stat.csv' % (homedir))
 	
@@ -101,14 +101,7 @@ def fanpwr_placement(apps, num_machines):
 	bigTable = []
 	labels = ['combination', 'opt_placement', 'pkg_power', 'perf', 'min_fan_power', 'max_fan_power', 'avg_fan_power', 'min_power', 'max_power', 'avg_power', 'worst_perf', 'best_perf']
 	for comb in possCombs:
-		notPossible = False
-		for c in comb:
-			if comb.count(c) > 2:
-				notPossible = True
-				break
-		if notPossible:
-			continue
-		print comb
+		print(comb)
 		placements = list(itertools.permutations(comb))
 		min_avg_pwr = 5000
 		max_avg_pwr = 0
@@ -168,13 +161,13 @@ def fanpwr_placement(apps, num_machines):
 		avg_avg_fanpwr = avg_avg_fanpwr/len(placements)
 		aRow = (p_max_str, p_str, this_avg_pwr, this_perf, min_avg_fanpwr, max_avg_fanpwr, avg_avg_fanpwr, min_avg_pwr, max_avg_pwr, avg_avg_pwr, min_perf, max_perf)
 		bigTable.append(aRow)
-	print "finished loop"	
+	print("finished loop")
 	df_bigTable = pd.DataFrame.from_records(bigTable, columns=labels)
 	df_bigTable.to_csv('%s/coolr/analyzeddata/min-fanpower-stat-plc.csv' % (homedir))
 
 def appPair_perf(app1, app2, hi):
-	fn_pat1 = '%s/coolr/data/perf/copy-%s/run-%d/%s-%s-%s*.out' % (homedir, tag, hi, app1, app2, app1)
-	fn_pat2 = '%s/coolr/data/perf/copy-%s/run-%d/%s-%s-%s*.out' % (homedir, tag, hi, app1, app2, app2)
+	fn_pat1 = '%s/coolr/data/perf/%s/run-%d/%s-%s-%s*.out' % (homedir, tag, hi, app1, app2, app1)
+	fn_pat2 = '%s/coolr/data/perf/%s/run-%d/%s-%s-%s*.out' % (homedir, tag, hi, app1, app2, app2)
 	app_fname1 = glob.glob(fn_pat1)[0]
 	app_fname2 = glob.glob(fn_pat2)[0]
 	#fd1 = open(app_fname1, 'r')
@@ -190,7 +183,7 @@ def appPair_perf(app1, app2, hi):
 
 def perf(apps, num_machines):
 	perfTable = []
-        labels = []
+	labels = []
 	for hi in range(1, num_machines+1):
 		idx = hi - 1
 		for ni in nodes:
@@ -201,16 +194,16 @@ def perf(apps, num_machines):
 
 if __name__ == '__main__':
 	parser = ArgumentParser()
-	parser.add_argument('-t', '--tag', dest='tag', action='store', help='tag', default='May13-2018')
+	parser.add_argument('-t', '--tag', dest='tag', action='store', help='tag', default='May18-2018')
 	parser.add_argument('-b', '--benchmark', dest='benchmark', action='store', help='benchmark', default='npb')
 	args = parser.parse_args()
 
 	tag = args.tag
 	benchmark = args.benchmark
 	
-	apps = npb_apps
-	if benchmark == 'parsec':
-		apps = parsec_apps
+	#apps = npb_apps
+	#if benchmark == 'parsec':
+	#	apps = parsec_apps
 
 	fanpwr_placement(apps, 2)
 	fan = {}
@@ -218,15 +211,13 @@ if __name__ == '__main__':
 		fan[hi] = {}
 		for app1 in apps:
 			for app2 in apps:
-				if app1 == app2:
-					continue
 				appPair = [app1, app2]	
 				app_fname1 = '%s/coolr/data/stats/%s/run-%d/coolr1-1000000-%s-%s-node0-stat.log' % (homedir, tag, hi, appPair[0], appPair[1])
 				app_fname2 = '%s/coolr/data/stats/%s/run-%d/coolr1-1000000-%s-%s-node1-stat.log' % (homedir, tag, hi, appPair[0], appPair[1])
 				# get first 25mins data
 				df_app1 = procdf(json2df(open(app_fname1, 'r'))).iloc[0:1500]
 				df_app2 = procdf(json2df(open(app_fname2, 'r'))).iloc[0:1500]
-				print df_app1.shape[0]
+				print(df_app1.shape[0])
 				# df_app = df_app1.iloc[0:1500]
 				fan[hi]['%s-%s' % (app1, app2)] = df_app1[['%s' % x for x in fans]].apply(getFanPwr(12000.,7.)).sum(axis=1)
 				#fan.to_csv('%s/coolr/analyzeddata/run-%d-%s-%s-stat.csv' % (homedir, hi, appPair[0], appPair[1]))

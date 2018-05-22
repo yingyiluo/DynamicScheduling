@@ -25,7 +25,7 @@ from argparse import ArgumentParser
 # import matplotlib.pyplot as plt
 
 #machines = range(1,17)
-machines = range(1, 5)
+machines = range(1, 3)
 apps = ['blackscholes', 'canneal', 'ferret', 'freqmine', 'bodytrack', 'bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.D.x', 'ua.C.x']
 #apps = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.D.x', 'ua.C.x']
 homedir = os.environ['HOME']
@@ -240,16 +240,17 @@ def pairOpt(workloads):
 def _pair_predict_fan(model, hi, app0, app1, dt = 1, cache = {}):
     if (hi, app0, app1) in cache:
         return cache[hi, app0, app1]
-    train = pickdf(hi, app0, app1)[300:300+100]
-    phyhist = evolve(model, train, dt)
+    train = db[hi]['%s-%s' % (app0, app1)][nTrain:nTrain+interval]
+    dfapp = db[hi]['%s-%s' % (app0, app1)][nTrain-120:nTrain]
+    phyhist = evolve(model, train, dfapp, dt)
 
-    cache[hi, app0, app1] = np.mean(phyhist[['%s_0' % x for x in libdata.fans]].apply(getFanPwr(12000., 7.)).sum(axis = 1))
+    cache[hi, app0, app1] = np.mean(phyhist['fanpower'])
     return cache[hi, app0, app1]
 
 def pairOptFan(workloads):
     nTrain = 3000
     nStep = 1000
-    nTry = 6
+    nTry = 2
     machines = range(1, int(len(workloads)/2) + 1)
     idx = lambda hi, ni: ni + hi * len(machines)
     ridx = lambda x : (x // len(machines), x % len(machines))
@@ -274,7 +275,7 @@ def pairOptFan(workloads):
         perflog['realized'].append(oneRun([table[app].loc[hi] for hi in machines for app in ['app0', 'app1']])['fanpwr'])
         perflog['predicted'].append(table['power'].sum())
         tsorted = table.sort_values(by='power', ascending=False)
-        # print(tsorted)
+        print(tsorted)
         ok = False
         for i, j in [(k, len(tsorted) - l - 1) for k in range(nTry) for l in range(nTry)]:
             h0 = tsorted.index[i]
@@ -304,23 +305,23 @@ def pairOptFan(workloads):
     ax.plot(perflog.index, perflog['realized'])
     ax.plot(perflog.index, perflog['predicted'])
     fig.suptitle(','.join(workloads))
-   # fig.savefig(optpdffan, format='pdf')
+    fig.savefig(optpdffan, format='pdf')
     return [table[app].loc[hi] for hi in machines for app in ['app0', 'app1']]
 
 def optWorkloads(workloads):
     # return naiveOpt(workloads)
-    return pairOpt(workloads)
-    #return pairOptFan(workloads)
+    # return pairOpt(workloads)
+    return pairOptFan(workloads)
 
 def getdfs(workloads):
     if isinstance(workloads, dict):
         for hi, apps in iter(workloads.items()):
             app0, app1 = apps
-            yield pickdf(hi, app0, app1)
+            yield db[hi]['%s-%s' % (app0, app1)]
     elif isinstance(workloads, (list, np.ndarray)):
         i = 0
         while i * 2 + 1 < len(workloads):
-            yield pickdf(i + 1, workloads[i * 2], workloads[i * 2 + 1])
+            yield db[i+1]['%s-%s' % (workloads[i * 2], workloads[i * 2 + 1])]
             i += 1
 
 def aggr(series, method):
@@ -381,8 +382,9 @@ def evalAccuracy(targets = ['fanpower', 'power_0', 'power_1'], apps_validation =
 def testPop(nTests = 1000):
     df = []
     optcmp = []
+    print(apps_validation)
     for i in range(nTests):
-        workloads = random.choice(libdata.apps, size=len(machines) * 2)
+        workloads = random.choice(apps_validation, size=len(machines) * 2)
 
         optwl = optWorkloads(workloads)
         optres = oneRun(optwl)
@@ -397,7 +399,7 @@ def testPop(nTests = 1000):
         if optres['pkgpwr'] < res.loc['min', 'pkgpwr']:
             # Unlikely, check
             print(workloads, optwl, optres['pkgpwr'], res.loc['min', 'pkgpwr'])
-
+            return -1
             # for i in len(works):
             #    if all([optwl[j] == works[i][j] for j in len(optwl)]):
             #        print('Found identical MC run')
@@ -441,13 +443,13 @@ def logperf(x):
     print(np.log(1. / x['inst_rate_0'][offset:].values.astype(float)))
     return np.sum(np.log(1. / x['inst_rate_0'][offset:].values.astype(float)) + np.log(1. / x['inst_rate_1'][offset:].values.astype(float)))
 
-offset = -120
-endoffset = -10
+offset = 600 #nTrain
+endoffset = 900#nTrain + interval
 targets = {
-    'maxfanpwr' : { 'aggr' : 'max', 'func' : lambda x : np.max(x[['%s_0' % x for x in libdata.fans]].apply(getFanPwr(12000., 7.)).max(axis = 1)) },
+    'maxfanpwr' : { 'aggr' : 'max', 'func' : lambda x : np.max(x['fanpower'][offset:endoffset]) },
     'maxpkgpwr' : { 'aggr' : 'max', 'func' : lambda x : x[['power_0', 'power_1']][offset:endoffset].max(axis=1).sort_values()[-10:].mean() },
     'pkgpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['power_0'][offset:endoffset] + x['power_1'][offset:endoffset]) },
-    'fanpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x[['%s_0' % x for x in libdata.fans]][offset:endoffset].apply(getFanPwr(12000., 7.)).sum(axis = 1)) },
+    'fanpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['fanpower'][offset:endoffset]) },
     'logperf'   : { 'aggr' : 'sum', 'func' : lambda x : np.sum(np.log(x['inst_rate_0'][offset:endoffset].values.astype(float)) + np.log(x['inst_rate_1'][offset:endoffset].values.astype(float))) },
     'instperf'  : { 'aggr' : 'mean', 'func' : lambda x : np.mean(x['inst_rate_0'][offset:endoffset] + x['inst_rate_1'][offset:endoffset]) },
 }
@@ -458,10 +460,9 @@ funcs = targets
 
 # MC parameters
 NRUNS = 600
-NTESTS = 10
+NTESTS = 5
 
 dt = 1
-
 if __name__ == '__main__':
     rand.seed(0)
     parser = ArgumentParser()
@@ -470,7 +471,7 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--alpha', dest='alpha', type=float, action='store', help='alpha', default=0.9)
     parser.add_argument('-r', '--learning_rate', dest='learning_rate', type=float, action='store', help='learning_rate', default=0.1)
     parser.add_argument('-d', '--depth', dest='depth', type=int, action='store', help='max depth', default=5)
-    parser.add_argument('-t', '--tag', dest='tag', action='store', help='tag', default='May13-2018')
+    parser.add_argument('-t', '--tag', dest='tag', action='store', help='tag', default='May18-2018')
     parser.add_argument('-n', '--n_estimators', dest='n_estimators', type=int, action='store', help='n estimators', default=100)
     parser.add_argument('-m', '--max_samples', dest='max_samples', type=int, action='store', help='max samples', default=10000)
     parser.add_argument('-o', '--optimizer', dest='opt', action='store', default='naive')
@@ -482,7 +483,7 @@ if __name__ == '__main__':
     nTrain = args.nTrain
     interval = args.interval
     ml_method = args.ml_method
-
+    optpdffan = PdfPages('%s/coolr/pdfs/optpdf-fan-%s.pdf' % (homedir, tag))
     #app0 = 'ft.B.x'
     #app1 = 'dc.B.x'
     db = {}
@@ -552,9 +553,10 @@ if __name__ == '__main__':
     for eval_times in range(1):
         pool = mp.Pool(mp.cpu_count()) 
         totrain = []
-        apps_train = rand.sample(libdata.apps, 10)
+        apps_train = rand.sample(libdata.apps, 2)
         temp = list(set(libdata.apps) - set(list(apps_train)))
         apps_validation = temp
+        print(apps_validation)
         for hi in machines:
             if ml_method == 'xgb':
                 model = model_xgb.XGBoost()
@@ -574,7 +576,7 @@ if __name__ == '__main__':
         pool.close()
         pool.join()
         res = evalAccuracy(apps_validation = apps_validation)
-        print(res)
+    #    print(res)
         allres.append(res)
     errs = {}
     for hi in machines:
@@ -592,8 +594,9 @@ if __name__ == '__main__':
     print(num_times)
     errs = { hi : {k : v/num_times for k, v in errs[hi].items()} for hi in machines}
     print(errs)
-#    pool = mp.Pool(mp.cpu_count())
-#    print(testPop(nTests = NTESTS))
+    pool = mp.Pool(mp.cpu_count())
+    print(testPop(nTests = NTESTS))
 #    # print(testDual())
-#    pool.close()
-#    pool.join()
+    pool.close()
+    pool.join()
+    optpdffan.close()
