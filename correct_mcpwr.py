@@ -131,6 +131,7 @@ def _pair_predict(model, hi, app0, app1, dt = 1, cache = {}):
     return cache[hi, app0, app1]
 
 def trainModel(arg):
+    print('in Train')
     model, hi, nTrain, dt, apps_train = arg 
     for app0 in apps_train:
         for app1 in apps_train:
@@ -271,6 +272,7 @@ def pairOptFan(workloads):
     table = pd.DataFrame(table, index = tableidx)
 
     while nStep > 0:
+        print('nStep: ', nStep)
         nStep -= 1
         perflog['realized'].append(oneRun([table[app].loc[hi] for hi in machines for app in ['app0', 'app1']])['fanpwr'])
         perflog['predicted'].append(table['power'].sum())
@@ -278,6 +280,7 @@ def pairOptFan(workloads):
         print(tsorted)
         ok = False
         for i, j in [(k, len(tsorted) - l - 1) for k in range(nTry) for l in range(nTry)]:
+            print(i, j)
             h0 = tsorted.index[i]
             h1 = tsorted.index[j]
             pbefore = tsorted['power'].loc[[h0, h1]].sum()
@@ -334,11 +337,19 @@ def aggr(series, method):
         return series.sum(axis=0)
 
 def oneRun(workloads):
+    stdwl = list(stdWorkloads(workloads))
+    i = 0
+    for df in getdfs(workloads):
+        a0, a1 = stdwl[i]
+        print(a0, a1)
+        df[600:1500].to_csv('%s/coolr/%s-%s.csv' % (homedir, a0, a1))
+        i += 1
     res = [{k : func['func'](df) for k, func in iter(funcs.items())} for df in getdfs(workloads)]
     res = pd.DataFrame(res)
-    # print(funcs, workloads, res)
+    print('in oneRun')
+    print(res)
     res = [ {k : aggr(res[k], func['aggr']) for k, func in iter(funcs.items())} ]
-    # print(pd.DataFrame(res).iloc[0])
+   # print(pd.DataFrame(res).iloc[0])
     return pd.DataFrame(res).iloc[0]
 
 def mcRuns(workloads, nRuns = 1000):
@@ -391,15 +402,15 @@ def testPop(nTests = 1000):
 
         if i % 10 == 0:
             print("%s\t%d\t%s" % (str(datetime.datetime.now()), i, str(workloads)))
-        res, works = mcRuns(workloads, nRuns = NRUNS)
-        df.append(res)
-        optcmp.append(optres - res.loc['mean'])
+#        res, works = mcRuns(workloads, nRuns = NRUNS)
+#        df.append(res)
+#        optcmp.append(optres - res.loc['mean'])
 
         # sanity checks
-        if optres['pkgpwr'] < res.loc['min', 'pkgpwr']:
+#        if optres['pkgpwr'] < res.loc['min', 'pkgpwr']:
             # Unlikely, check
-            print(workloads, optwl, optres['pkgpwr'], res.loc['min', 'pkgpwr'])
-            return -1
+#            print(workloads, optwl, optres['pkgpwr'], res.loc['min', 'pkgpwr'])
+#            return -1
             # for i in len(works):
             #    if all([optwl[j] == works[i][j] for j in len(optwl)]):
             #        print('Found identical MC run')
@@ -407,17 +418,17 @@ def testPop(nTests = 1000):
             #        break
 
     # df = [mcRuns(random.choice(libdata.apps, size=len(machines) * 2)) for _ in range(nTests)]
-    dfmean = pd.DataFrame([x.loc['mean'] for x in df])
+#    dfmean = pd.DataFrame([x.loc['mean'] for x in df])
     # print(dfmean)
-    gdf = pd.DataFrame([x.loc['max'] / x.loc['mean'] - 1. for x in df])
-    df = pd.DataFrame([1 - x.loc['min'] / x.loc['mean'] for x in df])
+#    gdf = pd.DataFrame([x.loc['max'] / x.loc['mean'] - 1. for x in df])
+#    df = pd.DataFrame([1 - x.loc['min'] / x.loc['mean'] for x in df])
     # print(df)
-    res = pd.DataFrame([dfmean.mean(axis=0), df.mean(axis=0), df.max(axis=0), df.min(axis=0), df.std(axis=0), gdf.mean(axis=0), gdf.max(axis=0), gdf.min(axis=0), gdf.std(axis=0)], \
-                       index = ['valmean', 'min_mean', 'min_max', 'min_min', 'min_std', 'max_mean', 'max_max', 'max_min', 'max_std'])
-    optcmp = pd.DataFrame(optcmp)
-    optres = pd.DataFrame([optcmp.mean(axis=0), optcmp.max(axis=0), optcmp.min(axis=0), optcmp.std(axis=0)], \
-                       index = ['mean', 'max', 'min', 'std'])
-    return res, optres
+#    res = pd.DataFrame([dfmean.mean(axis=0), df.mean(axis=0), df.max(axis=0), df.min(axis=0), df.std(axis=0), gdf.mean(axis=0), gdf.max(axis=0), gdf.min(axis=0), gdf.std(axis=0)], \
+#                       index = ['valmean', 'min_mean', 'min_max', 'min_min', 'min_std', 'max_mean', 'max_max', 'max_min', 'max_std'])
+#    optcmp = pd.DataFrame(optcmp)
+#    optres = pd.DataFrame([optcmp.mean(axis=0), optcmp.max(axis=0), optcmp.min(axis=0), optcmp.std(axis=0)], \
+#                       index = ['mean', 'max', 'min', 'std'])
+#    return res, optres
 
 def testDual():
     idx = []
@@ -444,7 +455,7 @@ def logperf(x):
     return np.sum(np.log(1. / x['inst_rate_0'][offset:].values.astype(float)) + np.log(1. / x['inst_rate_1'][offset:].values.astype(float)))
 
 offset = 600 #nTrain
-endoffset = 900#nTrain + interval
+endoffset = 1500#nTrain + interval
 targets = {
     'maxfanpwr' : { 'aggr' : 'max', 'func' : lambda x : np.max(x['fanpower'][offset:endoffset]) },
     'maxpkgpwr' : { 'aggr' : 'max', 'func' : lambda x : x[['power_0', 'power_1']][offset:endoffset].max(axis=1).sort_values()[-10:].mean() },
@@ -459,8 +470,8 @@ funcs = targets
 # print(oneRun({1:('bt.C.x', 'cg.C.x'), 2:('bt.C.x', 'cg.C.x')}, targets))
 
 # MC parameters
-NRUNS = 600
-NTESTS = 5
+NRUNS = 0
+NTESTS = 1
 
 dt = 1
 if __name__ == '__main__':
@@ -551,6 +562,7 @@ if __name__ == '__main__':
 
     allres = [] 
     for eval_times in range(1):
+        print("start: %s\t%d" % (str(datetime.datetime.now()), eval_times))
         pool = mp.Pool(mp.cpu_count()) 
         totrain = []
         apps_train = rand.sample(libdata.apps, 2)
@@ -570,14 +582,16 @@ if __name__ == '__main__':
                 model = model_mlp.MLP()
             model.init(**params)
             totrain.append((model, hi, nTrain, dt, apps_train))
-            lmodels = pool.map(trainModel, totrain)
-            for i in range(len(lmodels)):
-                models[i+1] = lmodels[i]
+        lmodels = pool.map(trainModel, totrain)
+        print("finish: %s\t%d" % (str(datetime.datetime.now()), eval_times))
+        for i in range(len(lmodels)):
+            models[i+1] = lmodels[i]
+        print(len(lmodels))
         pool.close()
         pool.join()
-        res = evalAccuracy(apps_validation = apps_validation)
+        #res = evalAccuracy(apps_validation = apps_validation)
     #    print(res)
-        allres.append(res)
+        #allres.append(res)
     errs = {}
     for hi in machines:
         errs[hi] = {}
@@ -592,10 +606,10 @@ if __name__ == '__main__':
             errs[hi]['power_1'] += res[hi]['power_1']
     num_times = len(allres)
     print(num_times)
-    errs = { hi : {k : v/num_times for k, v in errs[hi].items()} for hi in machines}
+    #errs = { hi : {k : v/num_times for k, v in errs[hi].items()} for hi in machines}
     print(errs)
     pool = mp.Pool(mp.cpu_count())
-    print(testPop(nTests = NTESTS))
+    testPop(nTests = NTESTS)
 #    # print(testDual())
     pool.close()
     pool.join()
