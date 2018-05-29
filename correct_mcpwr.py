@@ -18,14 +18,14 @@ import numpy as np
 import os
 import libdata
 import datetime
-# import mclearn
+import sys
+import glob
 import getpass
 from itertools import permutations
 from argparse import ArgumentParser
-# import matplotlib.pyplot as plt
+import time
 
-#machines = range(1,17)
-machines = range(1, 3)
+machines = range(1, 2)
 apps = ['blackscholes', 'canneal', 'ferret', 'freqmine', 'bodytrack', 'bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.D.x', 'ua.C.x']
 #apps = ['bt.C.x', 'cg.C.x', 'dc.B.x', 'ft.B.x', 'lu.C.x', 'mg.B.x', 'sp.D.x', 'ua.C.x']
 homedir = os.environ['HOME']
@@ -131,7 +131,7 @@ def _pair_predict(model, hi, app0, app1, dt = 1, cache = {}):
     return cache[hi, app0, app1]
 
 def trainModel(arg):
-    print('in Train')
+   # print('in Train')
     model, hi, nTrain, dt, apps_train = arg 
     for app0 in apps_train:
         for app1 in apps_train:
@@ -277,10 +277,10 @@ def pairOptFan(workloads):
         perflog['realized'].append(oneRun([table[app].loc[hi] for hi in machines for app in ['app0', 'app1']])['fanpwr'])
         perflog['predicted'].append(table['power'].sum())
         tsorted = table.sort_values(by='power', ascending=False)
-        print(tsorted)
+        #print(tsorted)
         ok = False
         for i, j in [(k, len(tsorted) - l - 1) for k in range(nTry) for l in range(nTry)]:
-            print(i, j)
+            #print(i, j)
             h0 = tsorted.index[i]
             h1 = tsorted.index[j]
             pbefore = tsorted['power'].loc[[h0, h1]].sum()
@@ -337,27 +337,32 @@ def aggr(series, method):
         return series.sum(axis=0)
 
 def oneRun(workloads):
-    stdwl = list(stdWorkloads(workloads))
-    i = 0
-    for df in getdfs(workloads):
-        a0, a1 = stdwl[i]
-        print(a0, a1)
-        df[600:1500].to_csv('%s/coolr/%s-%s.csv' % (homedir, a0, a1))
-        i += 1
+#    stdwl = list(stdWorkloads(workloads))
+#    i = 0
+#    for df in getdfs(workloads):
+#        a0, a1 = stdwl[i]
+#        print(a0, a1)
+#        df[600:1500].to_csv('%s/coolr/%s-%s.csv' % (homedir, a0, a1))
+#        i += 1
     res = [{k : func['func'](df) for k, func in iter(funcs.items())} for df in getdfs(workloads)]
     res = pd.DataFrame(res)
-    print('in oneRun')
-    print(res)
+    #print('in oneRun')
+   # print(res)
     res = [ {k : aggr(res[k], func['aggr']) for k, func in iter(funcs.items())} ]
-   # print(pd.DataFrame(res).iloc[0])
+  #  print(pd.DataFrame(res).iloc[0])
     return pd.DataFrame(res).iloc[0]
 
-def mcRuns(workloads, nRuns = 1000):
-    # onerun = lambda x: oneRun(x, funcs)
-    works = [random.permutation(workloads) for i in range(nRuns)]
-    df = pd.DataFrame(pool.map(oneRun, works))
+def mcRuns(workloads):
+    #nRuns = 2
+    #works = [random.permutation(workloads) for i in range(nRuns)]
+    works = list(permutations(workloads))
+    array_works = [np.asarray(w) for w in works]
+    print(array_works)
+    df = pd.DataFrame(pool.map(oneRun, array_works))
+    #print('finished mcRun')
     res = pd.DataFrame([df.mean(axis=0), df.max(axis=0), df.min(axis=0), df.std(axis=0)], \
                        index = ['mean', 'max', 'min', 'std'])
+    #print(res)
     return res, works
 
 def getFanPwr(rpm, pwr):
@@ -385,31 +390,51 @@ def evalAccuracy(targets = ['fanpower', 'power_0', 'power_1'], apps_validation =
         plt.plot([x/60.0 for x in range(1, nTrain+interval+1)], prediction['%s' % t], 'r', label='predict')
         plt.plot([x/60.0 for x in range(1, nTrain+interval+1)], actual['%s' % t], 'b', label='actual')
         plt.legend(loc=1)
-        print('%s/coolr/prediction/run-%d-%s-%s-%s.png' % (homedir, hi, t, app0, app1))
+        #print('%s/coolr/prediction/run-%d-%s-%s-%s.png' % (homedir, hi, t, app0, app1))
         plt.savefig('%s/coolr/prediction/run-%d-%s-%s-%s.png' % (homedir, hi, t, app0, app1))
         plt.close()
     return res
 
 def testPop(nTests = 1000):
     df = []
-    optcmp = []
-    print(apps_validation)
+    bigTable = []
+    #cmp_to_ob = []
+    #cmp_to_ob_pct = []
+    #cmp_to_worst = []
+    #cmp_to_worst_pct = []
+    labels = ['combination', 'pkgpwr_min', 'pkgpwr_mean', 'pkgpwr_max', 'fanpwr_min', 'fanpwr_mean', 'fanpwr_max', 'perf_min', 'perf_mean', 'perf_max', 'fan+pkg_min', 'fan+pkg_mean', 'fan+pkg_max', 'pred_pkgpwr', 'pred_fanpwr', 'pred_perf', 'pred_pkg+fan']
     for i in range(nTests):
+        aRow = []
         workloads = random.choice(apps_validation, size=len(machines) * 2)
+        comb = '-'.join(workloads)
+        aRow.append(comb)
 
-        optwl = optWorkloads(workloads)
-        optres = oneRun(optwl)
+        res, works = mcRuns(workloads)
+        df.append(res)
+        # real data
+        for k in funcs.keys():
+            aRow.append(res.loc['min', k])
+            aRow.append(res.loc['mean', k])
+            aRow.append(res.loc['max', k])
 
+        # pred data
         if i % 10 == 0:
             print("%s\t%d\t%s" % (str(datetime.datetime.now()), i, str(workloads)))
-#        res, works = mcRuns(workloads, nRuns = NRUNS)
-#        df.append(res)
-#        optcmp.append(optres - res.loc['mean'])
-
+        optwl = optWorkloads(workloads)
+        optres = oneRun(optwl)
+        if i % 10 == 0:
+            print("%s\t%d\t%s" % (str(datetime.datetime.now()), i, str(workloads)))
+        for k in funcs.keys():
+            aRow.append(optres.loc[k])
+        bigTable.append(tuple(aRow)) 
+        #cmp_to_ob.append(res.loc['mean'] - optres)
+        #cmp_to_ob_pct.append(1 - optres / res.loc['mean'])
+        #cmp_to_worst.append(res.loc['max'] - optres)
+        #cmp_to_worst_pct.append(1 - optres / res.loc['max'])
         # sanity checks
-#        if optres['pkgpwr'] < res.loc['min', 'pkgpwr']:
+        if optres['pkgpwr'] < res.loc['min', 'pkgpwr']:
             # Unlikely, check
-#            print(workloads, optwl, optres['pkgpwr'], res.loc['min', 'pkgpwr'])
+            print('unlike error', workloads, optwl, optres['pkgpwr'], res.loc['min', 'pkgpwr'])
 #            return -1
             # for i in len(works):
             #    if all([optwl[j] == works[i][j] for j in len(optwl)]):
@@ -417,18 +442,24 @@ def testPop(nTests = 1000):
             #        print(res.iloc(i))
             #        break
 
-    # df = [mcRuns(random.choice(libdata.apps, size=len(machines) * 2)) for _ in range(nTests)]
+    df_bigTable = pd.DataFrame.from_records(bigTable, columns=labels)
+#    df_bigTable.to_csv('%s/coolr/analyzeddata/prediction-stats.csv' % (homedir))    
 #    dfmean = pd.DataFrame([x.loc['mean'] for x in df])
-    # print(dfmean)
+   # print(dfmean)
 #    gdf = pd.DataFrame([x.loc['max'] / x.loc['mean'] - 1. for x in df])
-#    df = pd.DataFrame([1 - x.loc['min'] / x.loc['mean'] for x in df])
+#    bdf = pd.DataFrame([1 - x.loc['min'] / x.loc['mean'] for x in df])
     # print(df)
-#    res = pd.DataFrame([dfmean.mean(axis=0), df.mean(axis=0), df.max(axis=0), df.min(axis=0), df.std(axis=0), gdf.mean(axis=0), gdf.max(axis=0), gdf.min(axis=0), gdf.std(axis=0)], \
+#    res = pd.DataFrame([dfmean.mean(axis=0), bdf.mean(axis=0), bdf.max(axis=0), bdf.min(axis=0), bdf.std(axis=0), gdf.mean(axis=0), gdf.max(axis=0), gdf.min(axis=0), gdf.std(axis=0)], \
 #                       index = ['valmean', 'min_mean', 'min_max', 'min_min', 'min_std', 'max_mean', 'max_max', 'max_min', 'max_std'])
-#    optcmp = pd.DataFrame(optcmp)
-#    optres = pd.DataFrame([optcmp.mean(axis=0), optcmp.max(axis=0), optcmp.min(axis=0), optcmp.std(axis=0)], \
-#                       index = ['mean', 'max', 'min', 'std'])
-#    return res, optres
+    #print(cmp_to_ob)
+    #print(cmp_to_ob_pct)
+    #cmp_to_ob = pd.concat([pd.DataFrame(cmp_to_ob), pd.DataFrame(cmp_to_ob_pct)], axis = 1, join_axes=[pd.DataFrame(cmp_to_ob).index])
+    #cmp_to_ob.columns = ['fanpwr', 'pkg+fan pwr', 'pkgpwr', 'fanpwr_pct', 'pkg+fan pwr_pct', 'pkgpwr_pct'] 
+    #print(cmp_to_ob)
+    #optres = pd.DataFrame([cmp_to_ob.mean(axis=0), cmp_to_ob.max(axis=0), cmp_to_ob.min(axis=0), cmp_to_ob.std(axis=0)], \
+    #                   index = ['mean', 'max', 'min', 'std'])
+ #   return res, optres
+    return df_bigTable
 
 def testDual():
     idx = []
@@ -438,7 +469,7 @@ def testDual():
             print('Running %s %s' % (libdata.apps[i], libdata.apps[j]))
             idx.append((libdata.apps[i], libdata.apps[j]))
             workloads = [libdata.apps[i]] * len(machines) + [libdata.apps[j]] * len(machines)
-            df.append(mcRuns(workloads, nRuns = NRUNS))
+            df.append(mcRuns(workloads))
     dfmean = pd.DataFrame([x.loc['mean'] for x, works in df], index = idx)
     dfdiff = pd.DataFrame([x.loc['mean'] - x.loc['min'] for x, works in df], index = idx)
     # print(dfmean)
@@ -456,13 +487,19 @@ def logperf(x):
 
 offset = 600 #nTrain
 endoffset = 1500#nTrain + interval
+
+#targets = {
+#    'maxfanpwr' : { 'aggr' : 'max', 'func' : lambda x : np.max(x['fanpower'][offset:endoffset]) },
+#    'maxpkgpwr' : { 'aggr' : 'max', 'func' : lambda x : x[['power_0', 'power_1']][offset:endoffset].max(axis=1).sort_values()[-10:].mean() },
+#    'pkgpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['power_0'][offset:endoffset] + x['power_1'][offset:endoffset]) },
+#    'fanpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['fanpower'][offset:endoffset]) },
+#    'logperf'   : { 'aggr' : 'sum', 'func' : lambda x : np.sum(np.log(x['inst_rate_0'][offset:endoffset].values.astype(float)) + np.log(x['inst_rate_1'][offset:endoffset].values.astype(float))) },
+#    'instperf'  : { 'aggr' : 'mean', 'func' : lambda x : np.mean(x['inst_rate_0'][offset:endoffset] + x['inst_rate_1'][offset:endoffset]) },
+#}
 targets = {
-    'maxfanpwr' : { 'aggr' : 'max', 'func' : lambda x : np.max(x['fanpower'][offset:endoffset]) },
-    'maxpkgpwr' : { 'aggr' : 'max', 'func' : lambda x : x[['power_0', 'power_1']][offset:endoffset].max(axis=1).sort_values()[-10:].mean() },
     'pkgpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['power_0'][offset:endoffset] + x['power_1'][offset:endoffset]) },
     'fanpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['fanpower'][offset:endoffset]) },
-    'logperf'   : { 'aggr' : 'sum', 'func' : lambda x : np.sum(np.log(x['inst_rate_0'][offset:endoffset].values.astype(float)) + np.log(x['inst_rate_1'][offset:endoffset].values.astype(float))) },
-    'instperf'  : { 'aggr' : 'mean', 'func' : lambda x : np.mean(x['inst_rate_0'][offset:endoffset] + x['inst_rate_1'][offset:endoffset]) },
+    'perf'      : { 'aggr' : 'sum', 'func' : lambda x : x['perf_0'][offset] + x['perf_1'][offset]},
 }
 targets['pkg+fan pwr'] = { 'aggr' : 'sum', 'func' : lambda x: targets['pkgpwr']['func'](x) + targets['fanpwr']['func'](x) }
 funcs = targets
@@ -470,12 +507,13 @@ funcs = targets
 # print(oneRun({1:('bt.C.x', 'cg.C.x'), 2:('bt.C.x', 'cg.C.x')}, targets))
 
 # MC parameters
-NRUNS = 0
-NTESTS = 1
+NRUNS = 2
+NTESTS = 20
 
 dt = 1
 if __name__ == '__main__':
     rand.seed(0)
+    random.seed(0)
     parser = ArgumentParser()
     parser.add_argument('-ml', '--model', dest='ml_method', action='store', help='ml method', default='xgb')
     parser.add_argument('-l', '--loss', dest='loss', action='store', help='loss function', default='quantile')
@@ -502,8 +540,6 @@ if __name__ == '__main__':
         db[hi] = {}
         for app0 in apps:
             for app1 in apps:
-#                if app0 == app1:
-#                    continue
                 for ni in range(2):
                     db[hi][ni] = {}
                     dbni = db[hi][ni]
@@ -512,11 +548,16 @@ if __name__ == '__main__':
                     if ni == 1:
                         appx = app1
                     fname = '%s/coolr/data/stats/%s/run-%d/coolr1-1000000-%s-%s-node%d-stat.log' % (homedir, tag, hi, app0, app1, ni)
-                    dbni['df'] = libdata.procdf(libdata.json2df(open(fname, 'r')))
+                    perf_fn_pat = '%s/coolr/data/perf/%s/run-%d/%s-%s-%s*.out' % (homedir, tag, hi, app0, app1, appx)
+                    perf_fn = glob.glob(perf_fn_pat)[0]
+                    perf = int(os.popen('wc -l %s ' % perf_fn).read().split( )[0])
+                    df = libdata.procdf(libdata.json2df(open(fname, 'r')))
+                    df['perf'] = perf
+                    dbni['df'] = df
 
                 db[hi]['%s-%s' % (app0, app1)] = libdata.merge2df(db[hi][0]['df'], db[hi][1]['df'])
-      #  db[hi]['bt.C.x-ft.B.x'].to_csv('test.csv')
-    
+    #db[1]['bt.C.x-ft.B.x'].to_csv('test.csv')
+    #sys.exit()
     models = {}
     params = {
         "loss": "quantile",
@@ -549,6 +590,7 @@ if __name__ == '__main__':
     elif ml_method == 'gp':
         params = {
             'n_restarts_optimizer': 0,
+            'random_state': 0,
             'm': args.max_samples,
         }
     elif ml_method == 'mlp':
@@ -557,18 +599,22 @@ if __name__ == '__main__':
             'activation': 'relu',
             'solver': 'adam',
             'max_iter': 1000,
+            'random_state': 0,
             'm': args.max_samples,
         }
 
-    allres = [] 
-    for eval_times in range(1):
+    allres = []
+    pred_time = 0
+    train_time = 0 
+    for eval_times in range(8):
         print("start: %s\t%d" % (str(datetime.datetime.now()), eval_times))
         pool = mp.Pool(mp.cpu_count()) 
         totrain = []
-        apps_train = rand.sample(libdata.apps, 2)
+        apps_train = rand.sample(libdata.apps, 9)
         temp = list(set(libdata.apps) - set(list(apps_train)))
         apps_validation = temp
-        print(apps_validation)
+        print("validation apps: ", apps_validation)
+        train_start = time.time()
         for hi in machines:
             if ml_method == 'xgb':
                 model = model_xgb.XGBoost()
@@ -586,12 +632,20 @@ if __name__ == '__main__':
         print("finish: %s\t%d" % (str(datetime.datetime.now()), eval_times))
         for i in range(len(lmodels)):
             models[i+1] = lmodels[i]
-        print(len(lmodels))
+        train_time += (time.time() - train_start)
         pool.close()
         pool.join()
-        #res = evalAccuracy(apps_validation = apps_validation)
-    #    print(res)
-        #allres.append(res)
+        start = time.time()
+        #print(start)
+        res = evalAccuracy(apps_validation = apps_validation)
+        pred_time += (time.time() - start)
+        #pool = mp.Pool(mp.cpu_count())
+        #test_resdf = testPop(nTests = NTESTS) 
+        #test_resdf.to_csv('%s/coolr/analyzeddata/prediction-stats-%d.csv' % (homedir, eval_times))    
+        #pool.close()
+        #pool.join()
+        #print(res)
+        allres.append(res)
     errs = {}
     for hi in machines:
         errs[hi] = {}
@@ -600,16 +654,16 @@ if __name__ == '__main__':
         errs[hi]['power_1'] = 0
     for res in allres:
         for hi in machines:
-        # print(res[hi])
             errs[hi]['fanpower'] += res[hi]['fanpower']
             errs[hi]['power_0'] += res[hi]['power_0']
             errs[hi]['power_1'] += res[hi]['power_1']
     num_times = len(allres)
-    print(num_times)
-    #errs = { hi : {k : v/num_times for k, v in errs[hi].items()} for hi in machines}
+    errs = { hi : {k : v/num_times for k, v in errs[hi].items()} for hi in machines}
     print(errs)
+    print("train time: ", train_time/num_times)
+    print("prediction time: ", pred_time/num_times)
     pool = mp.Pool(mp.cpu_count())
-    testPop(nTests = NTESTS)
+    #print(testPop(nTests = NTESTS))
 #    # print(testDual())
     pool.close()
     pool.join()
