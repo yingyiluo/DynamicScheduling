@@ -392,7 +392,8 @@ def evalAccuracy(targets = ['fanpower', 'power_0', 'power_1'], apps_validation =
         for app0 in apps_validation:
            for app1 in apps_validation:
                df = db[hi]['%s-%s' % (app0, app1)][nTrain:nTrain+interval]
-               dfapp = db[hi]['%s-%s' % (app0, app1)][nTrain-120:nTrain]
+               dfapp = db[hi]['%s-%s' % (app0, app1)][nTrain-int(120/gap):nTrain]
+               #print(len(dfapp))
                phyhist = evolve(models[hi], df, dfapp, dt)
                for x in targets:
                    err[hi][x].append(np.mean(np.abs(phyhist[x].values - df[x].values)))
@@ -550,9 +551,9 @@ if __name__ == '__main__':
     seed = args.seed
     gap = args.gap
     # using first 10mins data to train
-    nTrain = args.nTrain/gap
+    nTrain = int(args.nTrain/gap)
     # prediction window sets to 5mins 
-    interval = args.interval/gap
+    interval = int(args.interval/gap)
    # optpdffan = PdfPages('%s/coolr/pdfs/optpdf-fan-4m-%s.pdf' % (homedir, tag))
     
     rand.seed(0)
@@ -573,7 +574,7 @@ if __name__ == '__main__':
                     perf_fn_pat = '%s/coolr/data/perf/%s/run-%d/%s-%s-%s*.out' % (homedir, tag, hi, app0, app1, appx)
                     perf_fn = glob.glob(perf_fn_pat)[0]
                     perf = int(os.popen('wc -l %s ' % perf_fn).read().split( )[0])
-                    df = libdata.procdf(libdata.json2df(open(fname, 'r'), gap))
+                    df = libdata.procdf(libdata.json2df(open(fname, 'r')), gap)
                     df['perf'] = perf
                     dbni['df'] = df
 
@@ -581,8 +582,8 @@ if __name__ == '__main__':
     db[1]['bt.C.x-ft.B.x'].to_csv('test.csv')
     #sys.exit()
     
-    offset = 600/gap #nTrain
-    endoffset = 1500/gap #nTrain + interval
+    offset = nTrain
+    endoffset = int(1500/gap) #nTrain + interval
     targets = {
         'pkgpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['power_0'][offset:endoffset] + x['power_1'][offset:endoffset]) },
         'fanpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['fanpower'][offset:endoffset]) },
@@ -639,7 +640,7 @@ if __name__ == '__main__':
     allres = []
     pred_time = 0
     train_time = 0 
-    for eval_times in range(8):
+    for eval_times in range(10):
         print("start: %s\t%d" % (str(datetime.datetime.now()), eval_times))
         pool = mp.Pool(mp.cpu_count()) 
         totrain = []
@@ -691,7 +692,7 @@ if __name__ == '__main__':
             errs[hi]['fanpower'] += res[hi]['fanpower']
             errs[hi]['power_0'] += res[hi]['power_0']
             errs[hi]['power_1'] += res[hi]['power_1']
-    num_times = 1#len(allres)
+    num_times = len(allres)
     errs = { hi : {k : v/num_times for k, v in errs[hi].items()} for hi in machines}
     print(errs)
     print("train time: ", train_time/num_times)

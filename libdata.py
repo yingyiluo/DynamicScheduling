@@ -35,17 +35,17 @@ def flatten(x):
 fans = list(flatten(fanGs))
 # print(fans)
 
-def json2df(jfile, gap):
-    #objs = [json.loads(line) for line in jfile]
-    objs = []
-    i = 0
-    for line in jfile:
-        if i % gap == 0:
-            objs.append(json.loads(line))
-        i += 1
+def json2df(jfile):
+    objs = [json.loads(line) for line in jfile]
+    #objs = []
+    #i = 0
+    #for line in jfile:
+    #    if i % gap == 0:
+    #        objs.append(json.loads(line))
+    #    i += 1
     return pd.DataFrame(objs)
 
-def procdf(df):
+def procdf(df, gap):
     df['irate'] = df['inst'] / df['intv']
     df['power'] = df['energy'] / (2 ** df['eunit']) / df['intv'] * 1e9
    # df['dtemp'] = df['tpkg'] - df['tpkg'].shift(1)
@@ -54,7 +54,9 @@ def procdf(df):
     df['fanpower'] = df[['%s' % x for x in fans]].apply(getFanPwr(12000.,7.)).sum(axis=1) 
 #    for g in fanGs:
 #        df[g] = df[fanGs[g]].mean(axis=1)
-    return df
+    droplist = [ i for i in range(df.shape[0]) if (i % gap) != 0]  
+    #print(droplist)
+    return df.drop(df.index[droplist])
 
 def merge2df(df1, df2, ts = 'ts'):
     fdts = lambda x: abs((df1[ts] - df2[ts].shift(x)).mean())
