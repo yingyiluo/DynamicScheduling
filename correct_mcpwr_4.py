@@ -60,7 +60,6 @@ def getdata(apphist, tgthist, dt):
     dftgt = dftgt.reindex(dfapp.index)
 
     df = dfapp
-    #print(df.columns)
     for t in range(1, dt+1):
         for sdf in [dfapp, dftgt]:
             shifted = sdf.shift(t)
@@ -113,7 +112,6 @@ def pickdf(hi, app0, app1):
     s1, e1 = libdata.pickapp(db[hi]['df'], 1, s1, e1)
     sts = max(s0, s1)
     ets = min(e0, e1)
-    # print(app0, app1, ets - sts)
     return db[hi]['df'][sts:ets]
 
 def naiveOpt(workloads):
@@ -254,8 +252,8 @@ def _pair_predict_fan(model, hi, app0, app1, dt = 1, cache = {}):
 
 def pairOptFan(workloads):
     nTrain = 3000
-    nStep = 100
-    nTry = 2
+    nStep = 50
+    nTry = 3
     machines = range(1, int(len(workloads)/2) + 1)
     idx = lambda hi, ni: ni + hi * len(machines)
     ridx = lambda x : (x // len(machines), x % len(machines))
@@ -274,9 +272,8 @@ def pairOptFan(workloads):
         table.append({'power':p, 'app0':app0, 'app1':app1})
     tableidx = [hi for hi in machines]
     table = pd.DataFrame(table, index = tableidx)
-    print(table)
-    while nStep > 0:
-        print('nStep: ', nStep)
+    #print(table)
+    while nStep > 0: 
         nStep -= 1
         perflog['realized'].append(oneRun([table[app].loc[hi] for hi in machines for app in ['app0', 'app1']])['fanpwr'])
         perflog['predicted'].append(table['power'].sum())
@@ -291,7 +288,7 @@ def pairOptFan(workloads):
             h1 = tsorted.index[j]
             pbefore = tsorted['power'].loc[[h0, h1]].sum()
             appset = [tsorted[app].loc[hi] for hi in [h0, h1] for app in ['app0', 'app1']]
-            print(appset)
+            #print(appset)
             for totest in permutations(appset):
                 a00, a01, a10, a11 = totest
                 pa = _pair_predict_fan(models[h0], h0, a00, a01, cache=cache, dt=dt)
@@ -310,13 +307,21 @@ def pairOptFan(workloads):
         if not ok:
             break
         table = tsorted
-        print("tsorted table", table)
+    #    print("tsorted table", table)
+    print('nStep: ', nStep)
     perflog = pd.DataFrame(perflog)
+    workload_str = '-'.join(workloads)
+    #optpdffan = PdfPages('%s/coolr/pdfs/fan-4m-%s-%s.eps' % (homedir, tag, workload_str))
+    optpdffan = '%s/coolr/pdfs/fan-4m-%s-%s.eps' % (homedir, tag, workload_str)
     fig, ax = plt.subplots()
-    ax.plot(perflog.index, perflog['realized'])
-    ax.plot(perflog.index, perflog['predicted'])
+    ax.plot(perflog.index, perflog['realized'], 'r', label='actual')
+    ax.plot(perflog.index, perflog['predicted'], 'b', label='predicted')
+    plt.ylabel('Total Fan Power (W)', fontsize=16)
+    plt.xlabel('Step', fontsize=16)
+    plt.legend(loc=1)
     fig.suptitle(','.join(workloads))
-    fig.savefig(optpdffan, format='pdf')
+    fig.savefig(optpdffan, format='eps')
+    plt.close()
     return [table[app].loc[hi] for hi in machines for app in ['app0', 'app1']]
 
 def optWorkloads(workloads):
@@ -361,14 +366,14 @@ def oneRun(workloads):
     return pd.DataFrame(res).iloc[0]
 
 def mcRuns(workloads):
-    nRuns = 200
+    nRuns = 400
     #works = [random.permutation(workloads) for i in range(nRuns)]
     works = list(permutations(workloads))
     array_works = [np.asarray(w) for w in works]
     final_works = array_works
     numWorks = len(array_works)
     if numWorks >  nRuns:
-        final_works = [array_works[i] for i in random.sample(xrange(numWorks), nRuns)]
+        final_works = [array_works[i] for i in rand.sample(range(numWorks), k=nRuns)]
     #print(array_works)
     df = pd.DataFrame(pool.map(oneRun, final_works))
     #print('finished mcRun')
@@ -414,8 +419,9 @@ def testPop(nTests = 1000):
     #cmp_to_ob_pct = []
     #cmp_to_worst = []
     #cmp_to_worst_pct = []
-    labels = ['combination', 'pkgpwr_min', 'pkgpwr_mean', 'pkgpwr_max', 'fanpwr_min', 'fanpwr_mean', 'fanpwr_max', 'perf_min', 'perf_mean', 'perf_max', 'fan+pkg_min', 'fan+pkg_mean', 'fan+pkg_max', 'pred_pkgpwr', 'pred_fanpwr', 'pred_perf', 'pred_pkg+fan']
+    labels = ['combination', 'pkgpwr_min', 'pkgpwr_mean', 'pkgpwr_max', 'fanpwr_min', 'fanpwr_mean', 'fanpwr_max', 'perf_min', 'perf_mean', 'perf_max', 'fan+pkg_min', 'fan+pkg_mean', 'fan+pkg_max', 'pred_pkgpwr', 'pred_fanpwr', 'pred_perf', 'pred_pkg+fan', 'decision_time']
     for i in range(nTests):
+        print("progress: ", i)
         aRow = []
         workloads = random.choice(apps, size=len(machines) * 2)
         comb = '-'.join(workloads)
@@ -430,14 +436,17 @@ def testPop(nTests = 1000):
             aRow.append(res.loc['max', k])
 
         # pred data
-        if i % 10 == 0:
-            print("%s\t%d\t%s" % (str(datetime.datetime.now()), i, str(workloads)))
+        start = time.time()
+       # if i % 10 == 0:
+       #     print("%s\t%d\t%s" % (str(datetime.datetime.now()), i, str(workloads)))
         optwl = optWorkloads(workloads)
+       # if i % 10 == 0:
+       #     print("%s\t%d\t%s" % (str(datetime.datetime.now()), i, str(workloads)))
+        decision_time = (time.time()-start)
         optres = oneRun(optwl)
-        if i % 10 == 0:
-            print("%s\t%d\t%s" % (str(datetime.datetime.now()), i, str(workloads)))
         for k in funcs.keys():
             aRow.append(optres.loc[k])
+        aRow.append(decision_time)
         bigTable.append(tuple(aRow)) 
         #cmp_to_ob.append(res.loc['mean'] - optres)
         #cmp_to_ob_pct.append(1 - optres / res.loc['mean'])
@@ -519,7 +528,7 @@ funcs = targets
 # print(oneRun({1:('bt.C.x', 'cg.C.x'), 2:('bt.C.x', 'cg.C.x')}, targets))
 
 # MC parameters
-NRUNS = 2
+#NRUNS = 2
 NTESTS = 500
 
 dt = 1
@@ -544,7 +553,7 @@ if __name__ == '__main__':
     nTrain = args.nTrain
     interval = args.interval
     ml_method = args.ml_method
-    optpdffan = PdfPages('%s/coolr/pdfs/optpdf-fan-%s.pdf' % (homedir, tag))
+   # optpdffan = PdfPages('%s/coolr/pdfs/optpdf-fan-4m-%s.pdf' % (homedir, tag))
     #app0 = 'ft.B.x'
     #app1 = 'dc.B.x'
     db = {}
@@ -568,7 +577,7 @@ if __name__ == '__main__':
                     dbni['df'] = df
 
                 db[hi]['%s-%s' % (app0, app1)] = libdata.merge2df(db[hi][0]['df'], db[hi][1]['df'])
-    #db[1]['bt.C.x-ft.B.x'].to_csv('test.csv')
+    #db[4]['bt.C.x-ft.B.x'].to_csv('test.csv')
     #sys.exit()
     models = {}
     params = {
@@ -607,19 +616,18 @@ if __name__ == '__main__':
         }
     elif ml_method == 'mlp':
         params = {
-            'hidden_layer_sizes': (10, ),
+            'hidden_layer_sizes': (100, ),
             'activation': 'relu',
             'solver': 'adam',
             'max_iter': 1000,
             'random_state': 0,
-            'batch_size': 150,
             'm': args.max_samples,
         }
 
     allres = []
     pred_time = 0
     train_time = 0 
-    for eval_times in range(10):
+    for eval_times in range(1):
         print("start: %s\t%d" % (str(datetime.datetime.now()), eval_times))
         pool = mp.Pool(mp.cpu_count()) 
         totrain = []
@@ -654,8 +662,8 @@ if __name__ == '__main__':
         res = evalAccuracy(apps_validation = apps_validation)
         pred_time += (time.time() - start)
         pool = mp.Pool(mp.cpu_count())
-    #    test_resdf = testPop(nTests = NTESTS) 
-    #    test_resdf.to_csv('%s/coolr/analyzeddata/prediction-stats-%d-%d.csv' % (homedir, NTESTS, eval_times))    
+        test_resdf = testPop(nTests = NTESTS) 
+        test_resdf.to_csv('%s/coolr/analyzeddata/prediction-stats-4m-%d-%d.csv' % (homedir, NTESTS, eval_times))    
         pool.close()
         pool.join()
         #print(res)
@@ -671,7 +679,7 @@ if __name__ == '__main__':
             errs[hi]['fanpower'] += res[hi]['fanpower']
             errs[hi]['power_0'] += res[hi]['power_0']
             errs[hi]['power_1'] += res[hi]['power_1']
-    num_times = len(allres)
+    num_times = 1#len(allres)
     errs = { hi : {k : v/num_times for k, v in errs[hi].items()} for hi in machines}
     print(errs)
     print("train time: ", train_time/num_times)
@@ -681,4 +689,4 @@ if __name__ == '__main__':
 #    # print(testDual())
     pool.close()
     pool.join()
-    optpdffan.close()
+#    optpdffan.close()

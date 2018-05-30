@@ -12,8 +12,11 @@ apps = ['blackscholes', 'canneal', 'ferret', 'freqmine', 'bodytrack', 'bt.C.x', 
 #apps_validation = ['mg.B.x', 'sp.C.x', 'ua.C.x']
 
 fanGs = { 'FanGroup1' : ['Fan1A', 'Fan1B', 'Fan2A', 'Fan2B', 'Fan3A', 'Fan3B'], 'FanGroup2' : ['Fan4A', 'Fan4B'], 'FanGroup3' : ['Fan5A', 'Fan5B', 'Fan6A', 'Fan6B', 'Fan7A', 'Fan7B'] }
-appattrs = ['cyc', 'inst', 'llcref', 'llcmiss', 'br', 'brmiss', 'l2lin']
+#appattrs = ['cyc', 'inst', 'llcref', 'llcmiss', 'br', 'brmiss', 'l2lin']
+appattrs = ['cyc', 'inst', 'llcref', 'llcmiss', 'br', 'brmiss']
 phyattrs = ['power', 'fanpower']
+#targets = ['tpkg_0', 'tpkg_1', 'power_0', 'power_1', 'fanpower']
+targets = ['power_0', 'power_1', 'fanpower']
 apprates = ["%s_rate" % x for x in appattrs]
 homedir = os.environ['HOME']
 

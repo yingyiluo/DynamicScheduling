@@ -3,6 +3,8 @@
 import numpy as np
 import numpy.random as random
 import xgboost as xgb
+import libdata
+import matplotlib.pyplot as plt
 
 class XGBoost():
     def __init__(self):
@@ -86,6 +88,9 @@ class XGBoost():
 
     def fit(self):
         #print(self.args, self.X.shape, self.y.shape)
+        appFeatures = ["%s_%d_%d" % (x, i, t) for t in [1, 0] for x in libdata.apprates for i in [0,1]]
+        phyFeatures = ["%s_0" % (x) for x in libdata.targets]
+        feature_names = np.append(appFeatures, phyFeatures)
         X = self.X
         y = self.y
         #print(X)
@@ -98,6 +103,21 @@ class XGBoost():
         for i in range(self.nys):
             self.models.append(xgb.XGBModel(**self.args))
             self.models[i].fit(X, y[:,i])
+            if False:
+                #plot_importance(self.models[i])      
+                feature_importance = self.models[i].feature_importances_
+                feature_importance = 100.0 * (feature_importance / feature_importance.max())
+                sorted_idx = np.argsort(feature_importance)
+                sorted_idx = sorted_idx[-10:]
+                pos = np.arange(sorted_idx.shape[0]) + .5
+                plt.figure()
+                plt.barh(pos, feature_importance[sorted_idx], align='center')
+                print(sorted_idx)
+                plt.yticks(pos, feature_names[sorted_idx])
+                plt.xlabel('Relative Importance')
+                plt.title('Feature Importance for Fan Power Prediction')
+                plt.savefig("power_10r.eps", bbox_inches='tight')
+                print(feature_importance)
 
     def predict(self, X):
         ys = None
