@@ -506,8 +506,6 @@ def logperf(x):
     print(np.log(1. / x['inst_rate_0'][offset:].values.astype(float)))
     return np.sum(np.log(1. / x['inst_rate_0'][offset:].values.astype(float)) + np.log(1. / x['inst_rate_1'][offset:].values.astype(float)))
 
-offset = 600 #nTrain
-endoffset = 1500#nTrain + interval
 
 #targets = {
 #    'maxfanpwr' : { 'aggr' : 'max', 'func' : lambda x : np.max(x['fanpower'][offset:endoffset]) },
@@ -517,24 +515,20 @@ endoffset = 1500#nTrain + interval
 #    'logperf'   : { 'aggr' : 'sum', 'func' : lambda x : np.sum(np.log(x['inst_rate_0'][offset:endoffset].values.astype(float)) + np.log(x['inst_rate_1'][offset:endoffset].values.astype(float))) },
 #    'instperf'  : { 'aggr' : 'mean', 'func' : lambda x : np.mean(x['inst_rate_0'][offset:endoffset] + x['inst_rate_1'][offset:endoffset]) },
 #}
-targets = {
-    'pkgpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['power_0'][offset:endoffset] + x['power_1'][offset:endoffset]) },
-    'fanpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['fanpower'][offset:endoffset]) },
-    'perf'      : { 'aggr' : 'sum', 'func' : lambda x : x['perf_0'][offset] + x['perf_1'][offset]},
-}
-targets['pkg+fan pwr'] = { 'aggr' : 'sum', 'func' : lambda x: targets['pkgpwr']['func'](x) + targets['fanpwr']['func'](x) }
-funcs = targets
-
-# print(oneRun({1:('bt.C.x', 'cg.C.x'), 2:('bt.C.x', 'cg.C.x')}, targets))
+#targets = {
+#    'pkgpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['power_0'][offset:endoffset] + x['power_1'][offset:endoffset]) },
+#    'fanpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['fanpower'][offset:endoffset]) },
+#    'perf'      : { 'aggr' : 'sum', 'func' : lambda x : x['perf_0'][offset] + x['perf_1'][offset]},
+#}
+#targets['pkg+fan pwr'] = { 'aggr' : 'sum', 'func' : lambda x: targets['pkgpwr']['func'](x) + targets['fanpwr']['func'](x) }
+#funcs = targets
 
 # MC parameters
 #NRUNS = 2
-NTESTS = 500
+NTESTS = 1
 
 dt = 1
 if __name__ == '__main__':
-    rand.seed(0)
-    random.seed(0)
     parser = ArgumentParser()
     parser.add_argument('-ml', '--model', dest='ml_method', action='store', help='ml method', default='xgb')
     parser.add_argument('-l', '--loss', dest='loss', action='store', help='loss function', default='quantile')
@@ -546,16 +540,23 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--max_samples', dest='max_samples', type=int, action='store', help='max samples', default=10000)
     parser.add_argument('-o', '--optimizer', dest='opt', action='store', default='naive')
     parser.add_argument('-nt', '--nTrain', dest='nTrain', type=int, action='store', help='n trains', default=600)
-    parser.add_argument('-i', '--interval', dest='interval', type=int, action='store', help='internal', default=300)
+    parser.add_argument('-i', '--interval', dest='interval', type=int, action='store', help='interval', default=300)
+    parser.add_argument('-s', '--seed', dest='seed', type=int, action='store', help='random seed', default=0)
+    parser.add_argument('-g', '--gap', dest='gap', type=int, action='store', help='sample_gap', default=1)
     args = parser.parse_args()
 
     tag = args.tag
-    nTrain = args.nTrain
-    interval = args.interval
     ml_method = args.ml_method
+    seed = args.seed
+    gap = args.gap
+    # using first 10mins data to train
+    nTrain = args.nTrain/gap
+    # prediction window sets to 5mins 
+    interval = args.interval/gap
    # optpdffan = PdfPages('%s/coolr/pdfs/optpdf-fan-4m-%s.pdf' % (homedir, tag))
-    #app0 = 'ft.B.x'
-    #app1 = 'dc.B.x'
+    
+    rand.seed(0)
+    random.seed(seed)
     db = {}
     for hi in machines:
         db[hi] = {}
@@ -572,31 +573,42 @@ if __name__ == '__main__':
                     perf_fn_pat = '%s/coolr/data/perf/%s/run-%d/%s-%s-%s*.out' % (homedir, tag, hi, app0, app1, appx)
                     perf_fn = glob.glob(perf_fn_pat)[0]
                     perf = int(os.popen('wc -l %s ' % perf_fn).read().split( )[0])
-                    df = libdata.procdf(libdata.json2df(open(fname, 'r')))
+                    df = libdata.procdf(libdata.json2df(open(fname, 'r'), gap))
                     df['perf'] = perf
                     dbni['df'] = df
 
                 db[hi]['%s-%s' % (app0, app1)] = libdata.merge2df(db[hi][0]['df'], db[hi][1]['df'])
-    #db[4]['bt.C.x-ft.B.x'].to_csv('test.csv')
+    db[1]['bt.C.x-ft.B.x'].to_csv('test.csv')
     #sys.exit()
+    
+    offset = 600/gap #nTrain
+    endoffset = 1500/gap #nTrain + interval
+    targets = {
+        'pkgpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['power_0'][offset:endoffset] + x['power_1'][offset:endoffset]) },
+        'fanpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['fanpower'][offset:endoffset]) },
+        'perf'      : { 'aggr' : 'sum', 'func' : lambda x : x['perf_0'][offset] + x['perf_1'][offset]},
+    }
+    targets['pkg+fan pwr'] = { 'aggr' : 'sum', 'func' : lambda x: targets['pkgpwr']['func'](x) + targets['fanpwr']['func'](x) }
+    funcs = targets
+
     models = {}
     params = {
         "loss": "quantile",
         "learning_rate": 0.1,
-		"n_estimators": 100,
-		"max_depth": 3,
-		"min_samples_split": 2,
-		"min_samples_leaf": 1,
-		"min_weight_fraction_leaf": 0.,
-		"subsample": 1.,
-		"max_features": "sqrt",
-		"max_leaf_nodes": None,
-		"alpha": 0.9,
-		"init": None,
-		"verbose": 0,
-		"warm_start": False,
-		"random_state": 0,
-		"presort": "auto",
+	"n_estimators": 100,
+	"max_depth": 3,
+	"min_samples_split": 2,
+	"min_samples_leaf": 1,
+	"min_weight_fraction_leaf": 0.,
+	"subsample": 1.,
+	"max_features": "sqrt",
+	"max_leaf_nodes": None,
+	"alpha": 0.9,
+	"init": None,
+	"verbose": 0,
+	"warm_start": False,
+	"random_state": 0,
+	"presort": "auto",
     }
     if ml_method == 'lr':
         params = {
@@ -627,12 +639,12 @@ if __name__ == '__main__':
     allres = []
     pred_time = 0
     train_time = 0 
-    for eval_times in range(1):
+    for eval_times in range(8):
         print("start: %s\t%d" % (str(datetime.datetime.now()), eval_times))
         pool = mp.Pool(mp.cpu_count()) 
         totrain = []
-        #apps_train = rand.sample(libdata.apps, 9)
-        apps_train = apps_npb
+        apps_train = rand.sample(libdata.apps, 9)
+        #apps_train = apps_npb
         temp = list(set(libdata.apps) - set(list(apps_train)))
         apps_validation = temp
         print("validation apps: ", apps_validation)
@@ -662,8 +674,8 @@ if __name__ == '__main__':
         res = evalAccuracy(apps_validation = apps_validation)
         pred_time += (time.time() - start)
         pool = mp.Pool(mp.cpu_count())
-        test_resdf = testPop(nTests = NTESTS) 
-        test_resdf.to_csv('%s/coolr/analyzeddata/prediction-stats-4m-%d-%d.csv' % (homedir, NTESTS, eval_times))    
+#        test_resdf = testPop(nTests = NTESTS) 
+#        test_resdf.to_csv('%s/coolr/analyzeddata/prediction-stats-4m-%d-%d.csv' % (homedir, NTESTS, eval_times))    
         pool.close()
         pool.join()
         #print(res)

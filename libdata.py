@@ -35,8 +35,14 @@ def flatten(x):
 fans = list(flatten(fanGs))
 # print(fans)
 
-def json2df(jfile):
-    objs = [json.loads(line) for line in jfile]
+def json2df(jfile, gap):
+    #objs = [json.loads(line) for line in jfile]
+    objs = []
+    i = 0
+    for line in jfile:
+        if i % gap == 0:
+            objs.append(json.loads(line))
+        i += 1
     return pd.DataFrame(objs)
 
 def procdf(df):
