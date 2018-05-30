@@ -368,7 +368,7 @@ def mcRuns(workloads):
     final_works = array_works
     numWorks = len(array_works)
     if numWorks >  nRuns:
-        final_works = [array_works[i] for i in random.sample(xrange(numWorks), nRuns)]
+        final_works = [array_works[i] for i in rand.sample(range(numWorks), nRuns)]
     #print(array_works)
     df = pd.DataFrame(pool.map(oneRun, final_works))
     #print('finished mcRun')
