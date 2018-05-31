@@ -251,18 +251,16 @@ def _pair_predict_fan(model, hi, app0, app1, dt = 1, cache = {}):
     return cache[hi, app0, app1]
 
 def pairOptFan(workloads):
-    nTrain = 3000
     nStep = 8
     nTry = 3
     machines = range(1, int(len(workloads)/2) + 1)
-    idx = lambda hi, ni: ni + hi * len(machines)
-    ridx = lambda x : (x // len(machines), x % len(machines))
     perflog = {
         'realized'  : [],
         'predicted' : [],
     }
 
     cache = {}
+    start = time.time()
     stdwl = list(stdWorkloads(workloads))
     table = []
     for i in range(len(stdwl)):
@@ -272,23 +270,19 @@ def pairOptFan(workloads):
         table.append({'power':p, 'app0':app0, 'app1':app1})
     tableidx = [hi for hi in machines]
     table = pd.DataFrame(table, index = tableidx)
-    #print(table)
     while nStep > 0: 
         nStep -= 1
-        perflog['realized'].append(oneRun([table[app].loc[hi] for hi in machines for app in ['app0', 'app1']])['fanpwr'])
-        perflog['predicted'].append(table['power'].sum())
+        #perflog['realized'].append(oneRun([table[app].loc[hi] for hi in machines for app in ['app0', 'app1']])['fanpwr'])
+        #perflog['predicted'].append(table['power'].sum())
         tsorted = table.sort_values(by='power', ascending=False)
-        #print(tsorted)
         ok = False
         for i, j in [(k, len(tsorted) - l - 1) for k in range(nTry) for l in range(nTry)]:
-            #print(i, j)
             if i == j:
                 continue
             h0 = tsorted.index[i]
             h1 = tsorted.index[j]
             pbefore = tsorted['power'].loc[[h0, h1]].sum()
             appset = [tsorted[app].loc[hi] for hi in [h0, h1] for app in ['app0', 'app1']]
-            #print(appset)
             for totest in permutations(appset):
                 a00, a01, a10, a11 = totest
                 pa = _pair_predict_fan(models[h0], h0, a00, a01, cache=cache, dt=dt)
@@ -307,22 +301,22 @@ def pairOptFan(workloads):
         if not ok:
             break
         table = tsorted
-    #    print("tsorted table", table)
+    decision_time = time.time() - start
     print('nStep: ', nStep)
-    perflog = pd.DataFrame(perflog)
-    workload_str = '-'.join(workloads)
-    #optpdffan = PdfPages('%s/coolr/pdfs/fan-4m-%s-%s.eps' % (homedir, tag, workload_str))
-    optpdffan = '%s/coolr/pdfs/fan-4m-%s-%s.eps' % (homedir, tag, workload_str)
-    fig, ax = plt.subplots()
-    ax.plot(perflog.index, perflog['realized'], 'r', label='actual')
-    ax.plot(perflog.index, perflog['predicted'], 'b', label='predicted')
-    plt.ylabel('Total Fan Power (W)', fontsize=16)
-    plt.xlabel('Step', fontsize=16)
-    plt.legend(loc=1)
-    fig.suptitle(','.join(workloads))
-    fig.savefig(optpdffan, format='eps')
-    plt.close()
-    return [table[app].loc[hi] for hi in machines for app in ['app0', 'app1']]
+    if False:
+        perflog = pd.DataFrame(perflog)
+        workload_str = '-'.join(workloads)
+        optpdffan = '%s/coolr/pdfs/fan-4m-%s-%s.eps' % (homedir, tag, workload_str)
+        fig, ax = plt.subplots()
+        ax.plot(perflog.index, perflog['realized'], 'r', label='actual')
+        ax.plot(perflog.index, perflog['predicted'], 'b', label='predicted')
+        plt.ylabel('Total Fan Power (W)', fontsize=16)
+        plt.xlabel('Step', fontsize=16)
+        plt.legend(loc=1)
+        fig.suptitle(','.join(workloads))
+        fig.savefig(optpdffan, format='eps')
+        plt.close()
+    return [table[app].loc[hi] for hi in machines for app in ['app0', 'app1']], decision_time
 
 def optWorkloads(workloads):
     # return naiveOpt(workloads)
@@ -420,7 +414,15 @@ def testPop(nTests = 1000):
     #cmp_to_ob_pct = []
     #cmp_to_worst = []
     #cmp_to_worst_pct = []
-    labels = ['combination', 'pkgpwr_min', 'pkgpwr_mean', 'pkgpwr_max', 'fanpwr_min', 'fanpwr_mean', 'fanpwr_max', 'perf_min', 'perf_mean', 'perf_max', 'logperf_min', 'logperf_mean', 'logperf_max', 'instperf_min', 'instperf_mean', 'instperf_max', 'fan+pkg_min', 'fan+pkg_mean', 'fan+pkg_max', 'pred_pkgpwr', 'pred_fanpwr', 'pred_perf', 'pred_logperf', 'pred_instperf', 'pred_pkg+fan', 'decision_time']
+    labels = ['combination']
+    for k in funcs.keys():
+        for d in ['min', 'mean', 'max']:
+            labels.append('%s_%s' % (k, d))
+    for k in funcs.keys():
+        labels.append('%s_pred' % (k))
+    labels.append('decision_time')
+    labels.append('pred_comb')
+    #labels = ['combination', 'pred_assignment', 'pkgpwr_min', 'pkgpwr_mean', 'pkgpwr_max', 'fanpwr_min', 'fanpwr_mean', 'fanpwr_max', 'perf_min', 'perf_mean', 'perf_max', 'logperf_min', 'logperf_mean', 'logperf_max', 'instperf_min', 'instperf_mean', 'instperf_max', 'fan+pkg_min', 'fan+pkg_mean', 'fan+pkg_max', 'pred_pkgpwr', 'pred_fanpwr', 'pred_perf', 'pred_logperf', 'pred_instperf', 'pred_pkg+fan', 'decision_time']
     for i in range(nTests):
         print("progress: ", i)
         aRow = []
@@ -437,17 +439,12 @@ def testPop(nTests = 1000):
             aRow.append(res.loc['max', k])
 
         # pred data
-        start = time.time()
-       # if i % 10 == 0:
-       #     print("%s\t%d\t%s" % (str(datetime.datetime.now()), i, str(workloads)))
-        optwl = optWorkloads(workloads)
-       # if i % 10 == 0:
-       #     print("%s\t%d\t%s" % (str(datetime.datetime.now()), i, str(workloads)))
-        decision_time = (time.time()-start)
+        optwl, decision_time = optWorkloads(workloads)
         optres = oneRun(optwl)
         for k in funcs.keys():
             aRow.append(optres.loc[k])
         aRow.append(decision_time)
+        aRow.append('-'.join(optwl))
         bigTable.append(tuple(aRow)) 
         #cmp_to_ob.append(res.loc['mean'] - optres)
         #cmp_to_ob_pct.append(1 - optres / res.loc['mean'])
@@ -457,7 +454,6 @@ def testPop(nTests = 1000):
         if optres['pkgpwr'] < res.loc['min', 'pkgpwr']:
             # Unlikely, check
             print('unlike error', workloads, optwl, optres['pkgpwr'], res.loc['min', 'pkgpwr'])
-#            return -1
             # for i in len(works):
             #    if all([optwl[j] == works[i][j] for j in len(optwl)]):
             #        print('Found identical MC run')
@@ -526,7 +522,7 @@ def logperf(x):
 
 # MC parameters
 #NRUNS = 2
-NTESTS = 100
+NTESTS = 120
 
 dt = 1
 if __name__ == '__main__':
@@ -585,6 +581,9 @@ if __name__ == '__main__':
     offset = nTrain
     endoffset = int(1500/gap) #nTrain + interval
     targets = {
+        'peakNodepwr' : { 'aggr' : 'max', 'func' : lambda x : np.max(x['power_0'][offset:endoffset] + x['power_1'][offset:endoffset]) },
+        'peakSocketpwr' : { 'aggr' : 'max', 'func' : lambda x : x[['power_0', 'power_1']][offset:endoffset].max(axis=1).sort_values()[-5:].mean() },
+        'maxfanpwr' : { 'aggr' : 'max', 'func' : lambda x : np.max(x['fanpower'][offset:endoffset]) },
         'pkgpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['power_0'][offset:endoffset] + x['power_1'][offset:endoffset]) },
         'fanpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['fanpower'][offset:endoffset]) },
         'perf'      : { 'aggr' : 'sum', 'func' : lambda x : x['perf_0'].iloc[0] + x['perf_1'].iloc[0]},
@@ -596,7 +595,7 @@ if __name__ == '__main__':
 
     models = {}
     params = {
-        "loss": "quantile",
+        "objective": "reg:linear",
         "learning_rate": 0.1,
 	"n_estimators": 100,
 	"max_depth": 3,
