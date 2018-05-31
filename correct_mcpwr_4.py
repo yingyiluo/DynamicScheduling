@@ -252,8 +252,8 @@ def _pair_predict_fan(model, hi, app0, app1, dt = 1, cache = {}):
 
 def pairOptFan(workloads):
     nTrain = 3000
-    nStep = 10
-    nTry = 2
+    nStep = 8
+    nTry = 3
     machines = range(1, int(len(workloads)/2) + 1)
     idx = lambda hi, ni: ni + hi * len(machines)
     ridx = lambda x : (x // len(machines), x % len(machines))
@@ -366,7 +366,7 @@ def oneRun(workloads):
     return pd.DataFrame(res).iloc[0]
 
 def mcRuns(workloads):
-    nRuns = 400
+    nRuns = 500
     #works = [random.permutation(workloads) for i in range(nRuns)]
     works = list(permutations(workloads))
     array_works = [np.asarray(w) for w in works]
