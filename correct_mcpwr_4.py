@@ -244,7 +244,7 @@ def _pair_predict_fan(model, hi, app0, app1, dt = 1, cache = {}):
     if (hi, app0, app1) in cache:
         return cache[hi, app0, app1]
     train = db[hi]['%s-%s' % (app0, app1)][nTrain:nTrain+interval]
-    dfapp = db[hi]['%s-%s' % (app0, app1)][nTrain-120:nTrain]
+    dfapp = db[hi]['%s-%s' % (app0, app1)][nTrain-int(120/gap):nTrain]
     phyhist = evolve(model, train, dfapp, dt)
 
     cache[hi, app0, app1] = np.mean(phyhist['fanpower'])
@@ -252,8 +252,8 @@ def _pair_predict_fan(model, hi, app0, app1, dt = 1, cache = {}):
 
 def pairOptFan(workloads):
     nTrain = 3000
-    nStep = 50
-    nTry = 3
+    nStep = 10
+    nTry = 2
     machines = range(1, int(len(workloads)/2) + 1)
     idx = lambda hi, ni: ni + hi * len(machines)
     ridx = lambda x : (x // len(machines), x % len(machines))
@@ -420,7 +420,7 @@ def testPop(nTests = 1000):
     #cmp_to_ob_pct = []
     #cmp_to_worst = []
     #cmp_to_worst_pct = []
-    labels = ['combination', 'pkgpwr_min', 'pkgpwr_mean', 'pkgpwr_max', 'fanpwr_min', 'fanpwr_mean', 'fanpwr_max', 'perf_min', 'perf_mean', 'perf_max', 'fan+pkg_min', 'fan+pkg_mean', 'fan+pkg_max', 'pred_pkgpwr', 'pred_fanpwr', 'pred_perf', 'pred_pkg+fan', 'decision_time']
+    labels = ['combination', 'pkgpwr_min', 'pkgpwr_mean', 'pkgpwr_max', 'fanpwr_min', 'fanpwr_mean', 'fanpwr_max', 'perf_min', 'perf_mean', 'perf_max', 'logperf_min', 'logperf_mean', 'logperf_max', 'instperf_min', 'instperf_mean', 'instperf_max', 'fan+pkg_min', 'fan+pkg_mean', 'fan+pkg_max', 'pred_pkgpwr', 'pred_fanpwr', 'pred_perf', 'pred_logperf', 'pred_instperf', 'pred_pkg+fan', 'decision_time']
     for i in range(nTests):
         print("progress: ", i)
         aRow = []
@@ -526,7 +526,7 @@ def logperf(x):
 
 # MC parameters
 #NRUNS = 2
-NTESTS = 1
+NTESTS = 100
 
 dt = 1
 if __name__ == '__main__':
@@ -579,7 +579,7 @@ if __name__ == '__main__':
                     dbni['df'] = df
 
                 db[hi]['%s-%s' % (app0, app1)] = libdata.merge2df(db[hi][0]['df'], db[hi][1]['df'])
-    db[1]['bt.C.x-ft.B.x'].to_csv('test.csv')
+   # db[1]['bt.C.x-ft.B.x'].to_csv('test.csv')
     #sys.exit()
     
     offset = nTrain
@@ -587,7 +587,9 @@ if __name__ == '__main__':
     targets = {
         'pkgpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['power_0'][offset:endoffset] + x['power_1'][offset:endoffset]) },
         'fanpwr'    : { 'aggr' : 'sum', 'func' : lambda x : np.mean(x['fanpower'][offset:endoffset]) },
-        'perf'      : { 'aggr' : 'sum', 'func' : lambda x : x['perf_0'][offset] + x['perf_1'][offset]},
+        'perf'      : { 'aggr' : 'sum', 'func' : lambda x : x['perf_0'].iloc[0] + x['perf_1'].iloc[0]},
+        'logperf'   : { 'aggr' : 'sum', 'func' : lambda x : np.sum(np.log(x['inst_rate_0'][offset:endoffset].values.astype(float)) + np.log(x['inst_rate_1'][offset:endoffset].values.astype(float))) },
+        'instperf'  : { 'aggr' : 'mean', 'func' : lambda x : np.mean(x['inst_rate_0'][offset:endoffset] + x['inst_rate_1'][offset:endoffset]) },
     }
     targets['pkg+fan pwr'] = { 'aggr' : 'sum', 'func' : lambda x: targets['pkgpwr']['func'](x) + targets['fanpwr']['func'](x) }
     funcs = targets
@@ -640,12 +642,12 @@ if __name__ == '__main__':
     allres = []
     pred_time = 0
     train_time = 0 
-    for eval_times in range(10):
+    for eval_times in range(1):
         print("start: %s\t%d" % (str(datetime.datetime.now()), eval_times))
         pool = mp.Pool(mp.cpu_count()) 
         totrain = []
-        apps_train = rand.sample(libdata.apps, 9)
-        #apps_train = apps_npb
+        #apps_train = rand.sample(libdata.apps, 9)
+        apps_train = apps_npb
         temp = list(set(libdata.apps) - set(list(apps_train)))
         apps_validation = temp
         print("validation apps: ", apps_validation)
@@ -675,8 +677,8 @@ if __name__ == '__main__':
         res = evalAccuracy(apps_validation = apps_validation)
         pred_time += (time.time() - start)
         pool = mp.Pool(mp.cpu_count())
-#        test_resdf = testPop(nTests = NTESTS) 
-#        test_resdf.to_csv('%s/coolr/analyzeddata/prediction-stats-4m-%d-%d.csv' % (homedir, NTESTS, eval_times))    
+        test_resdf = testPop(nTests = NTESTS) 
+        test_resdf.to_csv('%s/coolr/analyzeddata/prediction-stats-4m-%d-%d.csv' % (homedir, NTESTS, eval_times))    
         pool.close()
         pool.join()
         #print(res)
