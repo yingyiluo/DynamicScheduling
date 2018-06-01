@@ -6,6 +6,24 @@ import StringIO
 import threading
 import uuid
 import time
+import os
+
+homedir = os.environ['HOME']
+
+optmap={}
+optmap['blackscholes']="24 /home/cc/parsec_prebuilt/in_10M.txt black_out"
+optmap['canneal']="24 80000 2000 /home/cc/parsec_prebuilt/2500000.nets 300000"
+optmap['ferret']="/home/cc/parsec_prebuilt/corel/ lsh /home/cc/parsec_prebuilt/queries/ 3000 40 24 ferrer_out"
+optmap['freqmine']="/home/cc/parsec_prebuilt/webdocs_250k.dat 7200"
+optmap['bodytrack']="/home/cc/parsec_prebuilt/sequenceB_261/ 4 261 16000 220 0 24"
+optmap['bt.C.x']="</dev/null"
+optmap['cg.C.x']="</dev/null"
+optmap['ft.B.x']="</dev/null"
+optmap['sp.D.x']="</dev/null"
+optmap['mg.B.x']="</dev/null"
+optmap['ua.C.x']="</dev/null"
+optmap['lu.C.x']="</dev/null"
+optmap['dc.B.x']=""
 
 # bump machines pid to a threshold to avoid pid conflict
 def bumpPid(mic, num):
@@ -16,13 +34,13 @@ def bumpPid(mic, num):
 
 def runApp(prefix, app, node, tag):
     uid = str(uuid.uuid1())
-    fout = "/home/cc/exp/log/%s-%s-%s.out" % (prefix, app, tag)
-    ferr = "/home/cc/exp/log/%s-%s-%s.err" % (prefix, app, tag)
+    fout = "/home/cc/exp/perf/%s-%s-%s.out" % (prefix, app, tag)
+    ferr = "/home/cc/exp/err/%s-%s-%s.err" % (prefix, app, tag)
     if True:
         #print "enter cr_run"
         #print str(datetime.datetime.now())
         print "numactl --cpunodebind=%s --membind=%s /exp/prebuilt/%s </dev/null" % (node, node, app)
-        stdout = subprocess.check_output("numactl --cpunodebind=%s --membind=%s /exp/prebuilt/%s </dev/null 1>%s 2>%s & echo $!" % (node, node, app, fout, ferr), shell=True)
+        stdout = subprocess.check_output("numactl --cpunodebind=%s --membind=%s /home/cc/parsec_prebuilt/%s %s 1>%s 2>%s & echo $!" % (node, node, app, optmap[app], fout, ferr), shell=True)
         print node, stdout, app
         #print str(datetime.datetime.now())
     context = {
@@ -45,8 +63,8 @@ class MicLogger(threading.Thread):
 
     def run(self):
         #ts = self.context["datetime"].strftime("%Y-%m-%d-%H-%M-%S.%f")
-        fmic0 = "/home/cc/exp/data/%s-node0-stat.log" % (self.tag)
-        fmic1 = "/home/cc/exp/data/%s-node1-stat.log" % (self.tag)
+        fmic0 = "/home/cc/exp/stats/%s-node0-stat.log" % (self.tag)
+        fmic1 = "/home/cc/exp/stats/%s-node1-stat.log" % (self.tag)
         stat0 = open(fmic0, "w")
         stat1 = open(fmic1, "w")
         popen0 = subprocess.Popen(["/exp/bin/start-stat.sh", self.statfile0], stdin=None, stdout=stat0, stderr=subprocess.STDOUT)
@@ -61,7 +79,7 @@ class MicLogger(threading.Thread):
                 if cd < 0:
                     break
             time.sleep(1)
-        print "reach send signal"
+        #print "reach send signal"
         popen0.send_signal(9)
         popen1.send_signal(9)
         #subprocess.call("cp %s /exp/data/%s-node0-latest.log" % (fmic0, self.tag), shell=True)
@@ -130,7 +148,7 @@ class SwitchAppThread(threading.Thread):
     def __init__(self, context):
         super(SwitchAppThread, self).__init__()
         self.context = context
-    
+
     def run(self):
         if self.context['app'] == 'nek5':
             uid = self.context["uuid"]
@@ -152,18 +170,17 @@ class SwitchAppThread(threading.Thread):
             self.context["mic"] = nextmic
             self.context['pid'] = int(stdout)
         else:
-            #print "switching, ", self.context["pid"]
             uid = self.context["uuid"]
-            fname = "/mic/image1/%s.ckpt" % uid
-            subprocess.call("ssh %s 'cr_checkpoint --enable-NUMAware-chkpt --term -f %s -p %d'" % (self.context["mic"], fname, self.context["pid"]), shell=True)
-            subprocess.call("sudo chown yingyi:yingyi %s" % fname, shell=True)
-            subprocess.call("sudo chmod +r %s" % fname, shell=True)
-            nextmic = "mic1"
-            if self.context["mic"] == "mic1":
-                nextmic = "mic0"
-            subprocess.call("ssh %s 'cr_restart %s'" % (nextmic, fname), shell=True)
-            self.context["mic"] = nextmic
-            subprocess.call("rm -f %s" % fname, shell=True)
+            pid = self.context["pid"]
+            dname = "%s/images/%s-%s" % (homedir, self.context['app'], uid)    
+            subprocess.call("mkdir -p %s" % dname, shell=True)
+            subprocess.call("sudo criu dump --tree %d --images-dir %s --shell-job" % (pid, dname), shell=True)
+            #fname = "/mic/image1/%s.ckpt" % uid
+            #subprocess.call("ssh %s 'cr_checkpoint --enable-NUMAware-chkpt --term -f %s -p %d'" % (self.context["mic"], fname, self.context["pid"]), shell=True)
+            #subprocess.call("sudo chown yingyi:yingyi %s" % fname, shell=True)
+            #subprocess.call("sudo chmod +r %s" % fname, shell=True)
+            #subprocess.call("ssh %s 'cr_restart %s'" % (nextmic, fname), shell=True)
+            #subprocess.call("rm -f %s" % fname, shell=True)
 
 def switchAppAsync(context):
     th = SwitchAppThread(context)
@@ -179,6 +196,21 @@ def switchContext(context):
     thlist = switchContextAsync(context)
     for th in thlist:
         th.join()
+    for c in [context["app1"], context["app2"]]: 
+        pid = c["pid"]
+        uid = c["uuid"]
+        dname = "%s/images/%s-%s" % (homedir, c['app'], uid)
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            print pid, "not exist"
+        else:
+            subprocess.call("killall -9 %d" % pid, shell=True)
+        nextmic = "1"
+        if c["mic"] == "1":
+            nextmic = "0"
+        subprocess.call("sudo numactl --cpunodebind=%s --membind=%s criu restore --tree %d --images-dir %s --shell-job &" % (nextmic, nextmic, pid, dname), shell=True)
+        c["mic"] = nextmic
 
 def clearStat():
     subprocess.call("sudo echo 1 > /sys/class/xstat/reset0", shell=True)

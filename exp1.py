@@ -12,8 +12,8 @@ if len(sys.argv) != 3:
     sys.exit(1)
 
 
-if True:
-    #time.sleep(60)
+if False:
+    time.sleep(60)
     libcool.clearStat()
     logging.info("Running %s %s", sys.argv[1], sys.argv[2])
     start = time.time()
@@ -34,8 +34,8 @@ if False:
     c["logger"].join()
     logging.info("Finished %s %s", sys.argv[2], sys.argv[1])
 
-if False:
-    time.sleep(60)
+if True:
+    #time.sleep(60)
     libcool.clearStat()
     logging.info("Running %s %s, switch at 10min", sys.argv[1], sys.argv[2])
     start = time.time()
@@ -43,11 +43,25 @@ if False:
     time.sleep((10 * 60) - (time.time() - start))
     start = time.time()
     libcool.switchContext(c)
-    time.sleep((50 * 60) - (time.time() - start))
+    print "return to exp1, switch time is"
+    print (time.time() - start)
+    time.sleep((15 * 60) - (time.time() - start))
     libcool.stopContext(c)
     c["logger"].join()
     logging.info("Finished %s %s", sys.argv[1], sys.argv[2])
 
+if True:
+    time.sleep(60)
+    libcool.clearStat()
+    logging.info("Running %s %s", sys.argv[1], sys.argv[2])
+    start = time.time()
+    c = libcool.runConfiguration(sys.argv[1], sys.argv[2])
+    time.sleep((25 * 60) - (time.time() - start))
+    libcool.stopContext(c)
+    c["logger"].join()
+    logging.info("Finished %s %s", sys.argv[1], sys.argv[2])
+
+if False:
     time.sleep(60)
     libcool.clearStat()
     logging.info("Running %s %s, switch at 10min", sys.argv[2], sys.argv[1])
@@ -56,7 +70,7 @@ if False:
     time.sleep((10 * 60) - (time.time() - start))
     start = time.time()
     libcool.switchContext(c)
-    time.sleep((50 * 60) - (time.time() -start))
+    time.sleep((15 * 60) - (time.time() -start))
     libcool.stopContext(c)
     c["logger"].join()
     logging.info("Finished %s %s", sys.argv[2], sys.argv[1])
