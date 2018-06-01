@@ -318,10 +318,79 @@ def pairOptFan(workloads):
         plt.close()
     return [table[app].loc[hi] for hi in machines for app in ['app0', 'app1']], decision_time
 
+def _pair_predict_nodePeakPower(model, hi, app0, app1, dt = 1, cache = {}):
+    if (hi, app0, app1) in cache:
+        return cache[hi, app0, app1]
+    train = db[hi]['%s-%s' % (app0, app1)][nTrain:nTrain+interval]
+    dfapp = db[hi]['%s-%s' % (app0, app1)][nTrain-int(120/gap):nTrain]
+    phyhist = evolve(model, train, dfapp, dt)
+
+    cache[hi, app0, app1] = (phyhist['power_0'] + phyhist['power_1']).sort_values()[-5:].mean()
+    return cache[hi, app0, app1]
+
+def pairOptNodePeak(workloads):
+    m_len = int(len(workloads)/2)
+    nStep = 8
+    nTry = m_len - 1
+    machines = range(1, m_len + 1)
+    perflog = {
+        'realized'  : [],
+        'predicted' : [],
+    }
+
+    cache = {}
+    start = time.time()
+    stdwl = list(stdWorkloads(workloads))
+    table = []
+    for i in range(len(stdwl)):
+        hi = i + 1
+        app0, app1 = stdwl[i]
+        p = _pair_predict_nodePeakPower(models[hi], hi, app0, app1, cache=cache, dt=dt)
+        table.append({'power':p, 'app0':app0, 'app1':app1})
+    tableidx = [hi for hi in machines]
+    table = pd.DataFrame(table, index = tableidx)
+    while nStep > 0: 
+        nStep -= 1
+        #perflog['realized'].append(oneRun([table[app].loc[hi] for hi in machines for app in ['app0', 'app1']])['fanpwr'])
+        #perflog['predicted'].append(table['power'].sum())
+        tsorted = table.sort_values(by='power', ascending=False)
+        ok = False
+        i = 0
+        h0 = tsorted.index[i]
+        #for i, j in [(k, len(tsorted) - l - 1) for k in range(nTry) for l in range(nTry)]:
+        for j in range(nTry, 0, -1):
+            if i == j:
+                continue
+            h1 = tsorted.index[j]
+            pbefore = tsorted['power'].loc[[h0, h1]].max()
+            appset = [tsorted[app].loc[hi] for hi in [h0, h1] for app in ['app0', 'app1']]
+            for totest in permutations(appset):
+                a00, a01, a10, a11 = totest
+                pa = _pair_predict_nodePeakPower(models[h0], h0, a00, a01, cache=cache, dt=dt)
+                pb = _pair_predict_nodePeakPower(models[h1], h1, a10, a11, cache=cache, dt=dt)
+                if max(pa, pb) < pbefore:
+                    tsorted.set_value(h0, 'app0', a00)
+                    tsorted.set_value(h0, 'app1', a01)
+                    tsorted.set_value(h0, 'power', pa)
+                    tsorted.set_value(h1, 'app0', a10)
+                    tsorted.set_value(h1, 'app1', a11)
+                    tsorted.set_value(h1, 'power', pb)
+                    ok = True
+                    break
+            if ok:
+                break
+        if not ok:
+            break
+        table = tsorted
+    decision_time = time.time() - start
+    print('nStep: ', nStep)
+    return [table[app].loc[hi] for hi in machines for app in ['app0', 'app1']], decision_time
+
 def optWorkloads(workloads):
     # return naiveOpt(workloads)
     # return pairOpt(workloads)
-    return pairOptFan(workloads)
+    # return pairOptFan(workloads)
+    return pairOptNodePeak(workloads)
 
 def getdfs(workloads):
     if isinstance(workloads, dict):
@@ -693,7 +762,7 @@ if __name__ == '__main__':
             errs[hi]['fanpower'] += res[hi]['fanpower']
             errs[hi]['power_0'] += res[hi]['power_0']
             errs[hi]['power_1'] += res[hi]['power_1']
-    num_times = len(allres)
+    num_times = 1 #len(allres)
     errs = { hi : {k : v/num_times for k, v in errs[hi].items()} for hi in machines}
     print(errs)
     print("train time: ", train_time/num_times)
