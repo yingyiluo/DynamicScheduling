@@ -97,7 +97,6 @@ def pwr_placement(apps, num_machines):
 def fanpwr_placement(apps, num_machines):
 	#indices = range(len(apps))
 	possCombs = list(itertools.combinations(apps, num_machines*2)) #each machine has two sockets
-	#possCombs = list(itertools.product(apps, repeat=num_machines*2)) #each machine has two sockets
 	bigTable = []
 	labels = ['combination', 'opt_placement', 'pkg_power', 'perf', 'min_fan_power', 'max_fan_power', 'avg_fan_power', 'min_power', 'max_power', 'avg_power', 'worst_perf', 'best_perf']
 	for comb in possCombs:
@@ -116,8 +115,6 @@ def fanpwr_placement(apps, num_machines):
 		min_perf = 5000000
 		this_perf = 0
 		for p in placements:
-			if p[0] == p[1] or p[2] == p[3]:
-				continue
 			avg_pwr = 0
 			avg_fanpwr = 0
 			perf = 0
@@ -127,8 +124,8 @@ def fanpwr_placement(apps, num_machines):
 				app_fname1 = '%s/coolr/data/stats/%s/run-%d/coolr1-1000000-%s-%s-node0-stat.log' % (homedir, tag, hi, appPair[0], appPair[1])
 				app_fname2 = '%s/coolr/data/stats/%s/run-%d/coolr1-1000000-%s-%s-node1-stat.log' % (homedir, tag, hi, appPair[0], appPair[1])
 				# get first 25mins data
-				df_app1 = procdf(json2df(open(app_fname1, 'r'))).iloc[0:1500]
-				df_app2 = procdf(json2df(open(app_fname2, 'r'))).iloc[0:1500]
+				df_app1 = procdf(json2df(open(app_fname1, 'r'))).iloc[600:1500]
+				df_app2 = procdf(json2df(open(app_fname2, 'r'))).iloc[600:1500]
 				
 				# fan[hi]['%s-%s' % (appPair[0], appPair[1])] = 
 				avg_pwr += np.mean(df_app1['power']) + np.mean(df_app2['power'])
@@ -201,25 +198,27 @@ if __name__ == '__main__':
 	tag = args.tag
 	benchmark = args.benchmark
 	
-	#apps = npb_apps
+	apps = parsec_apps
 	#if benchmark == 'parsec':
 	#	apps = parsec_apps
 
-	fanpwr_placement(apps, 2)
+	fanpwr_placement(apps, 1)
 	fan = {}
 	for hi in machines:
 		fan[hi] = {}
-		for app1 in apps:
-			for app2 in apps:
+		for app1 in ["bt.C.x"]:
+			for app2 in ["mg.B.x"]:
 				appPair = [app1, app2]	
-				app_fname1 = '%s/coolr/data/stats/%s/run-%d/coolr1-1000000-%s-%s-node0-stat.log' % (homedir, tag, hi, appPair[0], appPair[1])
-				app_fname2 = '%s/coolr/data/stats/%s/run-%d/coolr1-1000000-%s-%s-node1-stat.log' % (homedir, tag, hi, appPair[0], appPair[1])
+				app_fname1 = '%s/exp/stats/coolr1-1000000%s-%s-%s-node0-stat.log' % (homedir, tag, appPair[0], appPair[1])
+				app_fname2 = '%s/exp/stats/coolr1-1000000%s-%s-%s-node1-stat.log' % (homedir, tag, appPair[0], appPair[1])
 				# get first 25mins data
 				df_app1 = procdf(json2df(open(app_fname1, 'r'))).iloc[0:1500]
 				df_app2 = procdf(json2df(open(app_fname2, 'r'))).iloc[0:1500]
 				print(df_app1.shape[0])
 				# df_app = df_app1.iloc[0:1500]
-				fan[hi]['%s-%s' % (app1, app2)] = df_app1[['%s' % x for x in fans]].apply(getFanPwr(12000.,7.)).sum(axis=1)
-				#fan.to_csv('%s/coolr/analyzeddata/run-%d-%s-%s-stat.csv' % (homedir, hi, appPair[0], appPair[1]))
+				#fan[hi]['%s-%s' % (app1, app2)] 
+				fan = df_app1[['%s' % x for x in fans]].apply(getFanPwr(12000.,7.)).sum(axis=1)
+				print(fan[600:1500].mean())
+				fan.to_csv('%s/coolr/analyzeddata/run-%d-%s-%s-%s-stat.csv' % (homedir, hi, tag, appPair[0], appPair[1]))
 				
-		fan[hi].to_csv('%s/coolr/analyzeddata/run-%d-fan-stat.csv' % (homedir, hi))
+		#fan[hi].to_csv('%s/coolr/analyzeddata/run-%d-fan-stat.csv' % (homedir, hi))
